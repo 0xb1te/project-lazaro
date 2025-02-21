@@ -1,5 +1,0 @@
-flask
-langchain
-pymongo
-python-dotenv
-ollama

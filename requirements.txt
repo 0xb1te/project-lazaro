@@ -5,3 +5,7 @@ sentence_transformers
 flask
 python-dotenv
 ollama
+langchain_community
+langchain_ollama
+flask_cors
+waitress

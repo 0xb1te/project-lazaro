@@ -1,20 +1,21 @@
+# backend/app.py
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from backend.utils.file_processor import process_file, process_zip_file
-from backend.utils.db_handler import get_db_collection
+from .utils.file_processor import process_file, process_zip_file
+from .utils.db_handler import get_db_collection
 from sklearn.metrics.pairwise import cosine_similarity
-from langchain_ollama import OllamaLLM  # Use OllamaLLM if it's a valid class
+from langchain_ollama import OllamaLLM
 from sentence_transformers import SentenceTransformer
 import os
-from dotenv import load_dotenv
 
+from .config import LLM_MODEL
+
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)  # Allow all origins
 
-load_dotenv()
-
 # Configuration
-LLM_MODEL = os.getenv("LLM_MODEL")
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -58,7 +59,7 @@ def upload_file():
             collection.insert_one({
                 "text": text.page_content,
                 "embedding": embedding,
-                "metadata": text.metadata  # Include metadata in the database
+                "metadata": text.metadata
             })
 
         # Clean up the temporary file
@@ -67,7 +68,6 @@ def upload_file():
         return jsonify({"message": "File indexed successfully"}), 200
 
     except Exception as e:
-        # Log the error and return a JSON response
         print(f"Error in upload_file: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -89,13 +89,13 @@ def ask_question():
     # Calculate similarity between the question embedding and each document's embedding
     similar_docs = []
     for doc in all_docs:
-        if "embedding" in doc:  # Ensure the document has an embedding
+        if "embedding" in doc:
             doc_embedding = doc["embedding"]
             similarity = cosine_similarity([question_embedding], [doc_embedding])[0][0]
             similar_docs.append({
                 "text": doc["text"],
                 "similarity": similarity,
-                "_id": str(doc["_id"])  # Convert ObjectId to string for JSON serialization
+                "_id": str(doc["_id"])
             })
 
     # Sort documents by similarity (descending order)
@@ -107,17 +107,16 @@ def ask_question():
     # Extract the text content from the top documents
     context = " ".join([doc["text"] for doc in top_docs])
 
-    # Use OllamaLLM to generate an answer based on the retrieved documents
+    # Initialize LLM
     llm = OllamaLLM(
-        model=LLM_MODEL, 
-        base_url="http://localhost:11434",  # Specify Ollama server URL
-        num_ctx=4096,  # Context window size
+        model=LLM_MODEL,
+        base_url="http://localhost:11434",
+        num_ctx=4096,
         temperature=0.8,
-        # Additional parameters if needed
-        request_timeout=120.0,  # Increase timeout for longer responses
+        request_timeout=120.0,
     )
     
-    # Create a prompt that includes the context and the question
+    # Create prompt
     prompt = f"""
         You are a helpful assistant named LAZARO. Answer the following question based only on the context provided below as 
         if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
@@ -127,7 +126,7 @@ def ask_question():
         - Use proper indentation and syntax highlighting for readability.
 
         2. **Code Quality**:
-        - Follow SOLID principles (Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion).
+        - Follow SOLID principles.
         - Ensure the code is clean, modular, and easy to maintain.
 
         3. **Code Review**:
@@ -167,17 +166,10 @@ def ask_question():
 
 @app.route("/debug/collection", methods=["GET"])
 def debug_collection():
-    # Retrieve the collection
     collection = get_db_collection()
-
-    # Fetch all documents from the collection
     documents = list(collection.find({}))
-
-    # Convert ObjectId to string for JSON serialization
+    
     for doc in documents:
         doc["_id"] = str(doc["_id"])
 
     return jsonify({"documents": documents})
-
-if __name__ == "__main__":
-    app.run(debug=True)
