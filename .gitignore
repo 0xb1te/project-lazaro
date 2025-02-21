@@ -1,0 +1,4 @@
+.env
+__pycache__/
+uploads/
+ollama_mongo_db_vector.egg-info

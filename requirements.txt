@@ -1,0 +1,7 @@
+langchain
+pymongo
+streamlit
+sentence_transformers
+flask
+python-dotenv
+ollama
