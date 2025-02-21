@@ -1,11 +1,21 @@
-langchain
-pymongo
-streamlit
-sentence_transformers
+# requirements.txt
+
+# Core Framework Dependencies
 flask
-python-dotenv
-ollama
-langchain_community
-langchain_ollama
-flask_cors
+flask-cors
 waitress
+streamlit
+
+# LangChain and Related
+langchain
+langchain_community
+langchain-ollama
+
+# Vector Database
+qdrant-client
+
+# Machine Learning & Embeddings
+sentence-transformers
+
+# Utilities
+python-dotenv

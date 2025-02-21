@@ -1,9 +1,12 @@
+# backend/config.py
+
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("DB_NAME")
+# Qdrant configuration
+QDRANT_HOST = os.getenv("QDRANT_HOST")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT"))
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 LLM_MODEL = os.getenv("LLM_MODEL")

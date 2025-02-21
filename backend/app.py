@@ -1,19 +1,15 @@
-# backend/app.py
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from .utils.file_processor import process_file, process_zip_file
-from .utils.db_handler import get_db_collection
-from sklearn.metrics.pairwise import cosine_similarity
+from .utils.qdrant_handler import init_collection, insert_documents, search_similar_documents, clear_collection
 from langchain_ollama import OllamaLLM
 from sentence_transformers import SentenceTransformer
 import os
-
 from .config import LLM_MODEL
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Allow all origins
+CORS(app)
 
 # Configuration
 UPLOAD_FOLDER = "uploads"
@@ -21,6 +17,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize SentenceTransformer model
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+# Initialize Qdrant collection
+init_collection()
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -36,33 +35,22 @@ def upload_file():
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
 
-        # Get database collection
-        collection = get_db_collection()
-        
-        # Delete all existing documents in the collection
-        collection.delete_many({})
+        # Clear existing documents
+        clear_collection()
 
-        # Check if the file is a zip file
+        # Process files
         if file.filename.endswith(".zip"):
-            # Process the zip file
             texts = process_zip_file(file_path)
         else:
-            # Process the file
             texts = process_file(file_path)
 
-        # Generate embeddings and store in MongoDB
-        for text in texts:
-            # Generate embedding using SentenceTransformer
-            embedding = model.encode(text.page_content).tolist()
+        # Generate embeddings for all texts
+        embeddings = [model.encode(text.page_content).tolist() for text in texts]
 
-            # Store the embedding along with the text
-            collection.insert_one({
-                "text": text.page_content,
-                "embedding": embedding,
-                "metadata": text.metadata
-            })
+        # Store documents and embeddings in Qdrant
+        insert_documents(texts, embeddings)
 
-        # Clean up the temporary file
+        # Clean up
         os.remove(file_path)
 
         return jsonify({"message": "File indexed successfully"}), 200
@@ -79,33 +67,14 @@ def ask_question():
     if not question:
         return jsonify({"error": "No question provided"}), 400
 
-    # Retrieve all documents from the collection
-    collection = get_db_collection()
-    all_docs = list(collection.find({}))
-
     # Generate embedding for the question
     question_embedding = model.encode(question).tolist()
 
-    # Calculate similarity between the question embedding and each document's embedding
-    similar_docs = []
-    for doc in all_docs:
-        if "embedding" in doc:
-            doc_embedding = doc["embedding"]
-            similarity = cosine_similarity([question_embedding], [doc_embedding])[0][0]
-            similar_docs.append({
-                "text": doc["text"],
-                "similarity": similarity,
-                "_id": str(doc["_id"])
-            })
-
-    # Sort documents by similarity (descending order)
-    similar_docs.sort(key=lambda x: x["similarity"], reverse=True)
-
-    # Limit to the top 5 most similar documents
-    top_docs = similar_docs[:5]
+    # Search for similar documents in Qdrant
+    similar_docs = search_similar_documents(question_embedding, limit=5)
 
     # Extract the text content from the top documents
-    context = " ".join([doc["text"] for doc in top_docs])
+    context = " ".join([doc["text"] for doc in similar_docs])
 
     # Initialize LLM
     llm = OllamaLLM(
@@ -162,14 +131,7 @@ def ask_question():
     # Get the answer
     answer = llm.invoke(prompt)
     
-    return jsonify({"answer": answer, "similar_docs": top_docs}), 200
+    return jsonify({"answer": answer, "similar_docs": similar_docs}), 200
 
-@app.route("/debug/collection", methods=["GET"])
-def debug_collection():
-    collection = get_db_collection()
-    documents = list(collection.find({}))
-    
-    for doc in documents:
-        doc["_id"] = str(doc["_id"])
-
-    return jsonify({"documents": documents})
+if __name__ == "__main__":
+    app.run(debug=True)
