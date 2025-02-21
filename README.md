@@ -9,4 +9,7 @@ This application allows users to drag and drop project files, index them in a Mo
    pip install -r backend/requirements.txt
    ```
 
+2. Rename .env.example to .env
+
 Based on https://medium.com/@eugenetan_91090/what-is-ollama-dfdaa40cfbca
+
