@@ -22,12 +22,13 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - COLLECTION_NAME=code_chunks
-      - LLM_MODEL=deepseek-r1:70b
+      - LLM_MODEL=deepseek-coder:6.7b
+      # For Linux
+      - OLLAMA_BASE_URL=http://172.17.0.1:11434
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       - qdrant
-      - ollama
     networks:
       - app-network
 
@@ -41,18 +42,8 @@ services:
     networks:
       - app-network
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - app-network
-
 volumes:
   qdrant_storage:
-  ollama_data:
   uploads_data:
 
 networks:
