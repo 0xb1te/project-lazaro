@@ -6,10 +6,11 @@ from langchain_ollama import OllamaLLM
 from sentence_transformers import SentenceTransformer
 import os
 from .config import LLM_MODEL
+from .config import OLLAMA_BASE_URL, LLM_MODEL
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configuration
 UPLOAD_FOLDER = "uploads"
@@ -20,6 +21,10 @@ model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 # Initialize Qdrant collection
 init_collection()
+
+@app.route("/")
+def health_check():
+    return jsonify({"status": "healthy"}), 200
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
@@ -79,7 +84,7 @@ def ask_question():
     # Initialize LLM
     llm = OllamaLLM(
         model=LLM_MODEL,
-        base_url="http://localhost:11434",
+        base_url=OLLAMA_BASE_URL,
         num_ctx=4096,
         temperature=0.8,
         request_timeout=120.0,

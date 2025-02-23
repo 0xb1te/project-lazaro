@@ -1,6 +1,3 @@
-// Constants
-const API_BASE_URL = "http://localhost:5000";
-
 // DOM Elements
 const dropArea = document.getElementById("drop-area");
 const chatHistory = document.getElementById("chat-history");
@@ -19,12 +16,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Event Listeners
 function setupEventListeners() {
-  // Drag and drop events
   ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
     dropArea.addEventListener(eventName, preventDefaults, false);
   });
 
-  // Highlight drop area
   ["dragenter", "dragover"].forEach((eventName) => {
     dropArea.addEventListener(
       eventName,
@@ -41,10 +36,8 @@ function setupEventListeners() {
     );
   });
 
-  // File drop handling
   dropArea.addEventListener("drop", handleDrop, false);
 
-  // Chat input handling
   chatInput.addEventListener("keypress", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -62,7 +55,6 @@ function setupEventListeners() {
   debugButton.addEventListener("click", handleDebugClick);
 }
 
-// File Handling
 function preventDefaults(e) {
   e.preventDefault();
   e.stopPropagation();
@@ -75,7 +67,6 @@ function handleDrop(e) {
   }
 }
 
-// API Interactions
 async function uploadFile(file) {
   if (isProcessing) return;
 
@@ -85,8 +76,8 @@ async function uploadFile(file) {
   try {
     isProcessing = true;
     toggleLoadingState(true);
-    console.log("Updating");
-    const response = await fetch(`${API_BASE_URL}/upload`, {
+
+    const response = await fetch(`/upload`, {
       method: "POST",
       body: formData,
     });
@@ -116,24 +107,37 @@ async function handleSendMessage() {
     isProcessing = true;
     toggleLoadingState(true);
 
+    // Add user message
     addMessage("user", question);
     chatInput.value = "";
     chatInput.style.height = "auto";
 
-    // Add loading message
-    const loadingMessage = addMessage("bot", "", true);
+    // Add temporary loading message
+    const loadingMessageElement = addMessage("bot", "", true);
 
-    const response = await fetch(`${API_BASE_URL}/ask`, {
+    const response = await fetch(`/ask`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question }),
     });
 
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    loadingMessage.remove();
+
+    // Remove loading message and add response
+    if (loadingMessageElement) {
+      loadingMessageElement.remove();
+    }
     addMessage("bot", formatMessage(data.answer));
+
   } catch (error) {
-    loadingMessage?.remove();
+    console.error('Error:', error);
+    if (loadingMessageElement) {
+      loadingMessageElement.remove();
+    }
     addMessage("bot", `Error: ${error.message}`);
   } finally {
     isProcessing = false;
@@ -148,13 +152,13 @@ async function handleDebugClick() {
     isProcessing = true;
     toggleLoadingState(true);
 
-    const response = await fetch(`${API_BASE_URL}/debug/collection`);
+    const response = await fetch(`/debug/collection`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
     const data = await response.json();
-    const formattedDebug = `Debug Collection:\n${JSON.stringify(
-      data,
-      null,
-      2
-    )}`;
+    const formattedDebug = `Debug Collection:\n${JSON.stringify(data, null, 2)}`;
     addMessage("bot", formattedDebug);
   } catch (error) {
     addMessage("bot", `Error: ${error.message}`);
@@ -164,7 +168,6 @@ async function handleDebugClick() {
   }
 }
 
-// Message Handling
 function addMessage(role, message, isLoading = false) {
   const messageElement = document.createElement("div");
   messageElement.classList.add("message", `${role}-message`);
@@ -176,11 +179,8 @@ function addMessage(role, message, isLoading = false) {
       </div>
     `;
   } else {
-    // Process message if it's from bot and contains special formatting
-    messageElement.innerHTML =
-      role === "bot" ? formatMessage(message) : message;
+    messageElement.innerHTML = role === "bot" ? formatMessage(message) : message;
 
-    // Initialize syntax highlighting for code blocks
     messageElement.querySelectorAll("pre code").forEach((block) => {
       hljs.highlightElement(block);
     });
@@ -196,7 +196,6 @@ function formatMessage(message) {
 
   message = message.trim();
 
-  // Try to parse JSON
   try {
     const parsedMessage = JSON.parse(message);
     message = parsedMessage.answer || parsedMessage.message || message;
@@ -204,7 +203,7 @@ function formatMessage(message) {
     // Not JSON, continue
   }
 
-  // Process headers (before other formatting)
+  // Process headers
   message = message.replace(/^(#{1,6})\s(.+)$/gm, (match, hashes, content) => {
     const level = hashes.length;
     return `<h${level} class="markdown-header header-${level}">${content}</h${level}>`;
@@ -213,51 +212,29 @@ function formatMessage(message) {
   // Process bold text
   message = message.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 
-  // Process thought blocks
-  message = message.replace(/<think>([\s\S]*?)<\/think>/g, (match, content) => {
-    const cleanContent = content
-      .split("\n")
-      .filter((line) => line.trim())
-      .join("<br>");
-
-    return `
-      <div class="thought-block">
-        <div class="thought-header">
-          <svg class="thought-icon" viewBox="0 0 24 24" width="16" height="16">
-            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8zm-1-4h2v2h-2zm1.61-9.96c-2.06-.3-3.88.97-4.43 2.79-.18.58.26 1.17.87 1.17h.2c.41 0 .74-.29.88-.67.32-.89 1.27-1.5 2.3-1.28.95.2 1.65 1.13 1.57 2.1-.1 1.34-1.62 1.63-2.45 2.88 0 .01-.01.01-.01.02-.01.02-.02.03-.03.05-.09.15-.18.32-.25.5-.01.03-.03.05-.04.08-.01.02-.01.04-.02.07-.12.34-.2.75-.2 1.25h2c0-.42.11-.77.28-1.07.02-.03.03-.06.05-.09.08-.14.18-.27.28-.39.01-.01.02-.03.03-.04.1-.12.21-.23.33-.34.96-.91 2.26-1.65 1.99-3.56-.24-1.74-1.61-3.21-3.35-3.47z"/>
-          </svg>
-          <span>Análisis del Pensamiento</span>
-        </div>
-        <div class="thought-content">${cleanContent}</div>
-      </div>
-    `;
-  });
-
-  // Process code blocks (rest of the function remains the same)
+  // Process code blocks with language
   message = message.replace(
-    /```(\w+)([\s\S]+?)```/g,
-    (match, language, code) => {
+    /```(\w+)?\n([\s\S]+?)```/g,
+    (match, language = "", code) => {
       const uniqueId = `code-block-${Math.random().toString(36).substr(2, 9)}`;
       return `
-      <div class="code-block" id="${uniqueId}">
-        <div class="code-header">
-          <div class="code-header-left">
-            <span class="code-language">${language}</span>
+        <div class="code-block" id="${uniqueId}">
+          <div class="code-header">
+            <div class="code-header-left">
+              <span class="code-language">${language}</span>
+            </div>
+            <div class="code-header-right">
+              <button class="copy-button" onclick="copyToClipboard('${uniqueId}')">
+                <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16">
+                  <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                </svg>
+                <span>Copy</span>
+              </button>
+            </div>
           </div>
-          <div class="code-header-right">
-            <button class="copy-button" onclick="copyToClipboard('${uniqueId}')">
-              <svg class="copy-icon" viewBox="0 0 24 24" width="16" height="16">
-                <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-              </svg>
-              <span>Copy</span>
-            </button>
-          </div>
+          <pre><code class="${language ? `language-${language}` : ''}">${escapeHtml(code.trim())}</code></pre>
         </div>
-        <pre><code class="language-${language}">${escapeHtml(
-        code.trim()
-      )}</code></pre>
-      </div>
-    `;
+      `;
     }
   );
 
@@ -268,10 +245,8 @@ function copyToClipboard(blockId) {
   const codeBlock = document.getElementById(blockId);
   const codeContent = codeBlock.querySelector("code").textContent;
 
-  navigator.clipboard
-    .writeText(codeContent)
+  navigator.clipboard.writeText(codeContent)
     .then(() => {
-      // Update button text temporarily
       const button = codeBlock.querySelector(".copy-button");
       const originalContent = button.innerHTML;
       button.innerHTML = `
@@ -282,7 +257,6 @@ function copyToClipboard(blockId) {
       `;
       button.classList.add("copied");
 
-      // Reset button after delay
       setTimeout(() => {
         button.innerHTML = originalContent;
         button.classList.remove("copied");
@@ -291,19 +265,16 @@ function copyToClipboard(blockId) {
     .catch(() => showNotification("Failed to copy code", "error"));
 }
 
-// Utility Functions
 function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
 }
 
-function copyCode(element) {
-  const code = element.querySelector("code").textContent;
-  navigator.clipboard
-    .writeText(code)
-    .then(() => showNotification("Code copied to clipboard!"))
-    .catch(() => showNotification("Failed to copy code", "error"));
+function toggleLoadingState(isLoading) {
+  sendButton.disabled = isLoading;
+  debugButton.disabled = isLoading;
+  dropArea.style.opacity = isLoading ? "0.5" : "1";
 }
 
 function showNotification(message, type = "success") {
@@ -311,12 +282,5 @@ function showNotification(message, type = "success") {
   notification.className = `notification ${type}`;
   notification.textContent = message;
   document.body.appendChild(notification);
-
   setTimeout(() => notification.remove(), 3000);
-}
-
-function toggleLoadingState(isLoading) {
-  sendButton.disabled = isLoading;
-  debugButton.disabled = isLoading;
-  dropArea.style.opacity = isLoading ? "0.5" : "1";
 }
