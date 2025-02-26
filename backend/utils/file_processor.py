@@ -26,7 +26,7 @@ def process_zip_file(zip_path):
                 
                 try:
                     # Skip binary files (e.g., .pyc, .git objects)
-                    if file.endswith((".pyc", ".git", ".bin", ".exe", ".dll", ".so")):
+                    if file.endswith((".pyc", ".git", ".bin", ".exe", ".dll", ".so", ".pyc")):
                         print(f"Skipping binary file: {file_path}")
                         continue
                     
