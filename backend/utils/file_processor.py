@@ -31,7 +31,19 @@ def process_zip_file(zip_path):
                         continue
                     
                     # Process text-based files
-                    if file.endswith((".txt", ".py", ".md", ".html", ".js", ".css", ".json", ".yaml", ".yml")):
+                    if file.endswith((".txt", ".py", ".md", ".html", ".js", ".jsx", ".ts", ".tsx", 
+                                         ".css", ".scss", ".sass", ".less", ".json", ".yaml", ".yml", 
+                                         ".xml", ".csv", ".sql", ".php", ".rb", ".java", ".c", ".cpp", 
+                                         ".h", ".hpp", ".cs", ".go", ".rs", ".swift", ".kt", ".kts", 
+                                         ".dart", ".lua", ".pl", ".pm", ".sh", ".bash", ".r", ".groovy", 
+                                         ".scala", ".clj", ".coffee", ".ex", ".exs", ".erl", ".hrl", 
+                                         ".hs", ".vue", ".svelte", ".ipynb", ".ini", ".toml", ".env", 
+                                         ".conf", ".config", ".properties", ".gradle", ".tf", ".tfvars", 
+                                         ".graphql", ".gql", ".proto", ".sol", ".m", ".mm", ".plist", 
+                                         ".bat", ".ps1", ".vbs", ".asm", ".s", ".d", ".jl", ".elm", 
+                                         ".fs", ".fsx", ".dockerfile", ".lock", ".rst", ".adoc", ".wiki",
+                                         ".log", ".gitignore", ".editorconfig", ".dart", ".pug", ".jade",
+                                         ".nix", ".vim", ".elm", ".dtd", ".xsl", ".xslt")):
                         # Use TextLoader for supported text-based files
                         loader = TextLoader(file_path)
                         documents = loader.load()
