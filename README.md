@@ -37,7 +37,7 @@ This application allows users to drag and drop project files, index them in a Qd
    ```env
    QDRANT_HOST=localhost
    QDRANT_PORT=6333
-   COLLECTION_NAME=code_chunks
+   COLLECTION_NAME=ai-rag-project
    LLM_MODEL=deepseek-coder:6.7b
    ```
 

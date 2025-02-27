@@ -54,6 +54,7 @@ def process_zip_file(zip_path):
                         # Split the text into chunks
                         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                         texts.extend(text_splitter.split_documents([document]))
+                    print(f"Processed file with filename at: ${file_path}")
                 except UnicodeDecodeError:
                     print(f"Skipping non-text file (binary or unsupported encoding): {file_path}")
                 except Exception as e:
