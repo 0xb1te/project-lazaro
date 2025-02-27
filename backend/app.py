@@ -142,8 +142,15 @@ def upload_file():
         print(f"Error in upload_file: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def get_answer_from_context(question, context):
-    """Helper function to get an answer to a question using context."""
+def get_answer_from_context(question, context, conversation_history=None):
+    """
+    Helper function to get an answer to a question using context and conversation history.
+    
+    Args:
+        question (str): The current user question
+        context (str): Context from retrieved documents
+        conversation_history (list, optional): Previous messages in the conversation
+    """
     # Initialize LLM
     llm = OllamaLLM(
         model=LLM_MODEL,
@@ -153,9 +160,19 @@ def get_answer_from_context(question, context):
         request_timeout=120.0,
     )
     
+    # Format conversation history if provided
+    conversation_context = ""
+    if conversation_history and len(conversation_history) > 0:
+        # Format previous messages (limit to last 5 to avoid context overflow)
+        prev_messages = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+        conversation_context = "Previous conversation:\n"
+        for msg in prev_messages:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            conversation_context += f"{role}: {msg['content']}\n\n"
+    
     # Create prompt
     prompt = f"""
-        You are a helpful assistant named LAZARO. Answer the following question based only on the context provided below as 
+        You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
         if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
 
         1. **Code Formatting**:
@@ -176,8 +193,8 @@ def get_answer_from_context(question, context):
         - Use bullet points or numbered lists for step-by-step explanations if necessary.
 
         5. **Context Awareness**:
-        - Use only the context provided below to generate the answer.
-        - Do not make assumptions or include information outside the context.
+        - Use both the document context provided and our conversation history to generate the answer.
+        - Maintain continuity with previous responses when appropriate.
 
         6. **Professional Tone**:
         - Use a professional and friendly tone.
@@ -198,10 +215,12 @@ def get_answer_from_context(question, context):
         - For any suggested changes, explain potential impacts on other parts of the codebase.
         - Provide fallback mechanisms or error handling for any new features.
 
-        Context:
+        {conversation_context}
+
+        Document Context:
         {context}
 
-        Question:
+        Current Question:
         {question}
 
         Answer:
@@ -225,8 +244,15 @@ def ask_question_internal(question, conversation_id=None):
     # Extract text content from top documents
     context = " ".join([doc["text"] for doc in similar_docs])
     
-    # Get answer
-    answer = get_answer_from_context(question, context)
+    # Get conversation history if conversation_id is provided
+    conversation_history = None
+    if conversation_id:
+        conversation = conversation_storage.get_conversation(conversation_id)
+        if conversation:
+            conversation_history = conversation.get("messages", [])
+    
+    # Get answer with conversation history
+    answer = get_answer_from_context(question, context, conversation_history)
     
     # Add to conversation history if conversation_id is provided
     if conversation_id:
