@@ -1,0 +1,64 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    expose:
+      - "5000"
+    environment:
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_PORT=${QDRANT_PORT}
+      - COLLECTION_NAME=${COLLECTION_NAME}
+      - CONVERSATIONS_COLLECTION=${CONVERSATIONS_COLLECTION}
+      - LLM_MODEL=${LLM_MODEL}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - FLASK_APP=backend.app
+      - FLASK_ENV=production
+      - STORAGE_DIR=/app/storage
+      - UPLOAD_FOLDER=/app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+      - storage_data:/app/storage
+    depends_on:
+      - qdrant
+    networks:
+      - app-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    networks:
+      - app-network
+
+volumes:
+  qdrant_storage:
+  uploads_data:
+  storage_data:  # New volume for persistent conversation storage
+
+networks:
+  app-network:
+    driver: bridge

@@ -32,30 +32,33 @@ def get_prompt():
 # Main function to handle the query process
 def query(input):
     if input:
-        # Initialize the language model with the specified model name
         llm = ChatOllama(model=LLM_MODEL)
-        # Get the vector database instance
-        db = get_vector_db()
-        # Get the prompt templates
-        QUERY_PROMPT, prompt = get_prompt()
-
-        # Set up the retriever to generate multiple queries using the language model and the query prompt
-        retriever = MultiQueryRetriever.from_llm(
-            db.as_retriever(), 
-            llm,
-            prompt=QUERY_PROMPT
+        db = get_qdrant_db()
+        
+        # Encode the question using your model
+        question_embedding = llm.encode(input).tolist()
+        
+        # Search for similar documents in Qdrant
+        hits = db.search(
+            collection_name="code_vectors",
+            query_vector=question_embedding,
+            limit=5
         )
-
-        # Define the processing chain to retrieve context, generate the answer, and parse the output
-        chain = (
-            {"context": retriever, "question": RunnablePassthrough()}
-            | prompt
-            | llm
-            | StrOutputParser()
-        )
-
-        response = chain.invoke(input)
-
+        
+        # Extract relevant contexts from search results
+        contexts = []
+        for hit in hits:
+            contexts.append(hit.payload["text"])
+            
+        # Generate prompt with all contexts
+        prompt_template = ChatPromptTemplate.from_template("""
+            Answer the question based ONLY on the following context:
+            {context}
+            Question: {question}
+        """)
+        
+        # Combine contexts and execute the query
+        final_context = "\n\n".join(contexts)
+        response = llm(prompt_template.format(context=final_context, question=input))
+        
         return response
-
-    return None

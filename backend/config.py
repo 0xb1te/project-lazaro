@@ -1,9 +1,32 @@
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("DB_NAME")
-COLLECTION_NAME = os.getenv("COLLECTION_NAME")
-LLM_MODEL = os.getenv("LLM_MODEL")
+# Qdrant configuration
+QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "ai-rag-project")
+CONVERSATIONS_COLLECTION = os.getenv("CONVERSATIONS_COLLECTION", "conversations")
+
+# LLM configuration
+LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+# Storage configuration
+STORAGE_DIR = os.getenv("STORAGE_DIR", "./storage")
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "./uploads")
+
+# Ensure required directories exist
+os.makedirs(STORAGE_DIR, exist_ok=True)
+os.makedirs(os.path.join(STORAGE_DIR, "conversations"), exist_ok=True)
+os.makedirs(os.path.join(STORAGE_DIR, "documents"), exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Embedding model configuration
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+
+# Application settings
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"

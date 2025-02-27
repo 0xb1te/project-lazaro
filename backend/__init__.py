@@ -1,23 +1,33 @@
 """
-Backend package for the Ollama Mongo DB Vector Search application.
-This package provides functionality for file processing, database handling,
-and embeddings generation using Ollama and MongoDB.
+Backend package for the Ollama Qdrant Vector Search application.
+This package provides functionality for file processing, vector database handling,
+and embeddings generation using Ollama and Qdrant.
 """
 
-from .utils.db_handler import get_db_collection
+from .utils.qdrant_handler import (
+    get_qdrant_client,
+    init_collection,
+    insert_documents,
+    search_similar_documents,
+    clear_collection
+)
 from .utils.file_processor import process_file, process_zip_file
 from .utils.embeddings import get_embeddings
-from .config import MONGO_URI, DB_NAME, COLLECTION_NAME, LLM_MODEL
+from .config import QDRANT_HOST, QDRANT_PORT, COLLECTION_NAME, LLM_MODEL
 
 __version__ = "0.1"
 
 __all__ = [
-    'get_db_collection',
+    'get_qdrant_client',
+    'init_collection',
+    'insert_documents',
+    'search_similar_documents',
+    'clear_collection',
     'process_file',
     'process_zip_file',
     'get_embeddings',
-    'MONGO_URI',
-    'DB_NAME',
+    'QDRANT_HOST',
+    'QDRANT_PORT',
     'COLLECTION_NAME',
     'LLM_MODEL'
 ]

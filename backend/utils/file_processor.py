@@ -26,12 +26,24 @@ def process_zip_file(zip_path):
                 
                 try:
                     # Skip binary files (e.g., .pyc, .git objects)
-                    if file.endswith((".pyc", ".git", ".bin", ".exe", ".dll", ".so")):
+                    if file.endswith((".pyc", ".git", ".bin", ".exe", ".dll", ".so", ".pyc")):
                         print(f"Skipping binary file: {file_path}")
                         continue
                     
                     # Process text-based files
-                    if file.endswith((".txt", ".py", ".md", ".html", ".js", ".css", ".json", ".yaml", ".yml")):
+                    if file.endswith((".txt", ".py", ".md", ".html", ".js", ".jsx", ".ts", ".tsx", 
+                                         ".css", ".scss", ".sass", ".less", ".json", ".yaml", ".yml", 
+                                         ".xml", ".csv", ".sql", ".php", ".rb", ".java", ".c", ".cpp", 
+                                         ".h", ".hpp", ".cs", ".go", ".rs", ".swift", ".kt", ".kts", 
+                                         ".dart", ".lua", ".pl", ".pm", ".sh", ".bash", ".r", ".groovy", 
+                                         ".scala", ".clj", ".coffee", ".ex", ".exs", ".erl", ".hrl", 
+                                         ".hs", ".vue", ".svelte", ".ipynb", ".ini", ".toml", ".env", 
+                                         ".conf", ".config", ".properties", ".gradle", ".tf", ".tfvars", 
+                                         ".graphql", ".gql", ".proto", ".sol", ".m", ".mm", ".plist", 
+                                         ".bat", ".ps1", ".vbs", ".asm", ".s", ".d", ".jl", ".elm", 
+                                         ".fs", ".fsx", ".dockerfile", ".lock", ".rst", ".adoc", ".wiki",
+                                         ".log", ".gitignore", ".editorconfig", ".dart", ".pug", ".jade",
+                                         ".nix", ".vim", ".elm", ".dtd", ".xsl", ".xslt")):
                         # Use TextLoader for supported text-based files
                         loader = TextLoader(file_path)
                         documents = loader.load()
@@ -54,6 +66,7 @@ def process_zip_file(zip_path):
                         # Split the text into chunks
                         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                         texts.extend(text_splitter.split_documents([document]))
+                    print(f"Processed file with filename at: ${file_path}")
                 except UnicodeDecodeError:
                     print(f"Skipping non-text file (binary or unsupported encoding): {file_path}")
                 except Exception as e:
