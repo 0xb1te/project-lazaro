@@ -10,6 +10,8 @@ services:
         condition: service_healthy
     networks:
       - app-network
+    env_file:
+      - .env
 
   backend:
     build:
@@ -17,20 +19,18 @@ services:
       dockerfile: Dockerfile.backend
     expose:
       - "5000"
+    env_file:
+      - .env
     environment:
-      - QDRANT_HOST=${QDRANT_HOST}
-      - QDRANT_PORT=${QDRANT_PORT}
-      - COLLECTION_NAME=${COLLECTION_NAME}
-      - CONVERSATIONS_COLLECTION=${CONVERSATIONS_COLLECTION}
-      - LLM_MODEL=${LLM_MODEL}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - FLASK_APP=backend.app
       - FLASK_ENV=production
       - STORAGE_DIR=/app/storage
       - UPLOAD_FOLDER=/app/uploads
+      - QDRANT_HOST=qdrant
     volumes:
       - uploads_data:/app/uploads
       - storage_data:/app/storage
+      - ./.env:/app/.env
     depends_on:
       - qdrant
     networks:
@@ -57,7 +57,7 @@ services:
 volumes:
   qdrant_storage:
   uploads_data:
-  storage_data:  # New volume for persistent conversation storage
+  storage_data:  # Volume for persistent conversation storage
 
 networks:
   app-network:
