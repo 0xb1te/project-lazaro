@@ -1,5 +1,3 @@
-# backend/app.py
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
@@ -153,6 +151,17 @@ def get_answer_from_context(question, context):
         7. **Answer if you the user calls you LAZARO**:
         - Answer without taking into account the provided codebase.
         - If you are called LAZARO, you are free to use information outside the context.
+
+        8. **Preserve Existing Functionality**:
+        - When suggesting code changes, always identify and preserve existing functionality.
+        - Clearly mark which parts of the code remain unchanged and which parts are modified.
+        - If suggesting new code, explain how it integrates with the existing system without breaking current features.
+        - When modifying code, include comments explaining the rationale for each change.
+
+        9. **Implementation Guidelines**:
+        - Present code modifications as targeted changes rather than complete rewrites when possible.
+        - For any suggested changes, explain potential impacts on other parts of the codebase.
+        - Provide fallback mechanisms or error handling for any new features.
 
         Context:
         {context}
