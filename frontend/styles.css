@@ -151,13 +151,60 @@
   color: white;
 }
 
+/* Filename style for backtick text */
+.filename {
+  background-color: #f3f3f3;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+/* Style for separated lines with colon-dash pattern */
+.separated-line {
+  padding: 0.5rem 0;
+  margin: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  display: block;
+}
+
+/* Make numbered list items clearer */
+.list-item {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.list-item strong {
+  position: absolute;
+  left: 0;
+}
+
 /* Estilos para bloques de código */
 .code-block {
   margin: 1rem 0;
-  position: relative;
   border-radius: 6px;
   overflow: hidden;
-  background-color: var(--code-bg);
+  background-color: var(--code-bg, #1e1e1e);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+pre code {
+  font-family: "Fira Code", Consolas, Monaco, "Andale Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .code-header {

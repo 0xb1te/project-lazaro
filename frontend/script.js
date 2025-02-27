@@ -569,30 +569,33 @@ function formatMessage(content) {
 
   content = content.trim();
 
-  // Process code blocks
+  // First, protect code blocks from other replacements by tokenizing them
+  const codeBlocks = [];
   content = content.replace(/```(\w+)?\n([\s\S]+?)```/g, (match, language, code) => {
-    const uniqueId = `code-block-${Math.random().toString(36).substring(2, 9)}`;
-    const displayLanguage = language || 'text';
-
-    return `
-      <div class="code-block" id="${uniqueId}">
-        <div class="code-header">
-          <div class="code-language">${displayLanguage}</div>
-          <button class="copy-button" onclick="copyToClipboard('${uniqueId}')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            <span>Copy</span>
-          </button>
-        </div>
-        <pre><code class="language-${displayLanguage}">${escapeHtml(code.trim())}</code></pre>
-      </div>
-    `;
+    const token = `___CODE_BLOCK_${codeBlocks.length}___`;
+    codeBlocks.push({
+      language: language || 'text',
+      code: code.trim()
+    });
+    return token;
   });
 
-  // Process <code></code> tags
-  content = content.replace(/<code>([\s\S]+?)<\/code>/g, (match, code) => {
-    return `<code class="inline-code">${escapeHtml(code)}</code>`;
+  // Process inline code with single backticks (protect from other replacements)
+  const inlineCodeBlocks = [];
+  content = content.replace(/`([^`]+)`/g, (match, code) => {
+    const token = `___INLINE_CODE_${inlineCodeBlocks.length}___`;
+    inlineCodeBlocks.push(code);
+    return token;
+  });
+
+  // Process lines with colon-dash pattern (but not within code blocks)
+  // Make sure not to match CSS properties
+  content = content.replace(/^([^:]+):\s*-\s*(.+)$/gm, (match, prefix, suffix) => {
+    // Don't match CSS properties or typical code patterns
+    if (prefix.trim().match(/^(margin|padding|border|color|font|background|width|height|display|position)/)) {
+      return match;
+    }
+    return `<div class="separated-line"><strong>${prefix}:</strong> ${suffix}</div>`;
   });
 
   // Process thought blocks
@@ -610,6 +613,16 @@ function formatMessage(content) {
     `;
   });
 
+  // Process numbered list items and ensure proper separation
+  content = content.replace(/^(\d+)\.\s+(.+)$/gm, (match, number, text) => {
+    return `<div class="list-item ml-4"><strong>${number}.</strong> ${text}</div>`;
+  });
+
+  // Process <code></code> tags
+  content = content.replace(/<code>([\s\S]+?)<\/code>/g, (match, code) => {
+    return `<code class="inline-code">${escapeHtml(code)}</code>`;
+  });
+
   // Process bold text
   content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
@@ -617,6 +630,30 @@ function formatMessage(content) {
   content = content.replace(/^(#{1,6})\s(.+)$/gm, (match, hashes, content) => {
     const level = hashes.length;
     return `<h${level} class="markdown-header header-${level}">${content}</h${level}>`;
+  });
+
+  // Restore inline code blocks with proper formatting
+  inlineCodeBlocks.forEach((code, i) => {
+    content = content.replace(`___INLINE_CODE_${i}___`, `<span class="filename">${escapeHtml(code)}</span>`);
+  });
+
+  // Restore code blocks with proper formatting
+  codeBlocks.forEach((block, i) => {
+    const uniqueId = `code-block-${Math.random().toString(36).substring(2, 9)}`;
+    content = content.replace(`___CODE_BLOCK_${i}___`, `
+      <div class="code-block" id="${uniqueId}">
+        <div class="code-header">
+          <div class="code-language">${block.language}</div>
+          <button class="copy-button" onclick="copyToClipboard('${uniqueId}')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <pre><code class="language-${block.language}">${escapeHtml(block.code)}</code></pre>
+      </div>
+    `);
   });
 
   return content;
