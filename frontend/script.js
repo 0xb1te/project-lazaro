@@ -259,6 +259,12 @@ async function loadConversation(conversationId) {
 
 async function createNewConversation(title = "New Conversation") {
   try {
+    // Ensure title is a string
+    if (typeof title !== 'string') {
+      console.error("Invalid title type:", typeof title);
+      title = "New Conversation";
+    }
+
     const response = await fetch(`${API_BASE_URL}/conversations`, {
       method: "POST",
       headers: {
@@ -434,6 +440,7 @@ function renderConversationsList(conversations) {
 }
 
 function renderConversation(conversation) {
+  console.log("Rendering new conversation", conversation);
   // Set the title
   currentConversationTitle.textContent = conversation.title;
 
@@ -536,8 +543,11 @@ function renderMessage(message) {
     `;
   }
 
+  // Make sure we have content
+  const content = message.content || '';
+
   // Set message content
-  bubbleElement.innerHTML = formatMessage(message.content);
+  bubbleElement.innerHTML = formatMessage(content);
 
   // Apply syntax highlighting to code blocks
   Array.from(bubbleElement.querySelectorAll('pre code')).forEach(block => {
@@ -549,6 +559,9 @@ function renderMessage(message) {
 
   // Scroll to the bottom
   chatHistory.scrollTop = chatHistory.scrollHeight;
+
+  // For debugging: log the message being rendered
+  console.log("Rendered message:", message.role, content.substring(0, 50) + (content.length > 50 ? '...' : ''));
 }
 
 function formatMessage(content) {
@@ -610,7 +623,6 @@ function formatMessage(content) {
 }
 
 // Update the handleSendMessage function to handle collection errors
-
 async function handleSendMessage() {
   const message = chatInput.value.trim();
 
@@ -623,6 +635,14 @@ async function handleSendMessage() {
     // Clear the input
     chatInput.value = "";
     chatInput.style.height = "auto";
+
+    // Immediately render the user message in the UI
+    const userMessage = {
+      role: "user",
+      content: message,
+      timestamp: new Date().toISOString()
+    };
+    renderMessage(userMessage);
 
     // Add a typing indicator
     const loadingId = addTypingIndicator();
@@ -642,42 +662,39 @@ async function handleSendMessage() {
     // Remove typing indicator
     removeTypingIndicator(loadingId);
 
-    const responseText = await response.text();
-    let data;
-
-    try {
-      data = JSON.parse(responseText);
-    } catch (e) {
-      throw new Error(`Unexpected Response: ${response.status} (${response.statusText})\nRaw response content:\n${responseText}`);
-    }
-
+    // Process the response
     if (!response.ok) {
-      throw new Error(data.error || "Error processing message");
+      // If there's an error, still show it in the UI
+      const errorData = await response.json();
+      const errorMessage = errorData.error || "Error processing message";
+
+      const assistantErrorMessage = {
+        role: "assistant",
+        content: `Error: ${errorMessage}`,
+        timestamp: new Date().toISOString()
+      };
+      renderMessage(assistantErrorMessage);
+
+      throw new Error(errorMessage);
     }
 
-    // Refresh the conversation to show new messages
-    await loadConversation(activeConversationId);
+    // Parse the response
+    const data = await response.json();
+
+    // Render the assistant's response if it exists
+    if (data && data.assistant_message && data.assistant_message.content) {
+      const assistantMessage = {
+        role: "assistant",
+        content: data.assistant_message.content,
+        timestamp: data.assistant_message.timestamp || new Date().toISOString()
+      };
+      renderMessage(assistantMessage);
+    }
   } catch (error) {
     console.error("Error sending message:", error);
 
-    // If we get a collection not found error, add a message to the UI about uploading documents
-    if (error.message.includes("Collection") || error.message.includes("doesn't exist")) {
-      const fakeMessage = {
-        role: "user",
-        content: message,
-        timestamp: new Date().toISOString()
-      };
-      renderMessage(fakeMessage);
-
-      const assistantMessage = {
-        role: "assistant",
-        content: "I need some documents to help answer your questions. Please upload a file first.",
-        timestamp: new Date().toISOString()
-      };
-      renderMessage(assistantMessage);
-    } else {
-      showToast(`Error: ${error.message}`, "error");
-    }
+    // Show error in toast
+    showToast(`Error: ${error.message}`, "error");
   } finally {
     isProcessing = false;
     toggleLoadingState(false);

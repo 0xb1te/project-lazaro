@@ -19,6 +19,10 @@ class ConversationStorage:
     
     def create_conversation(self, title: str = "New Conversation", initial_message: str = None) -> Dict[str, Any]:
         """Create a new conversation with a unique ID"""
+        # Ensure title is a string
+        if not isinstance(title, str):
+            title = str(title) if title is not None else "New Conversation"
+            
         conversation_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
         
