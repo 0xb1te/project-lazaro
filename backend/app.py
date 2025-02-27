@@ -7,7 +7,19 @@ from .utils.file_processor import process_file, process_zip_file
 from langchain_ollama import OllamaLLM
 from sentence_transformers import SentenceTransformer
 
-from .config import LLM_MODEL, OLLAMA_BASE_URL
+from .config import (
+    LLM_MODEL, 
+    OLLAMA_BASE_URL, 
+    QDRANT_HOST, 
+    QDRANT_PORT, 
+    COLLECTION_NAME, 
+    CONVERSATIONS_COLLECTION,
+    STORAGE_DIR,
+    UPLOAD_FOLDER,
+    EMBEDDING_MODEL,
+    EMBEDDING_DIMENSION,
+    DEBUG_MODE
+)
 from .utils.qdrant_handler import (
     init_collection, 
     insert_documents, 
@@ -21,11 +33,10 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configuration
-UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Initialize SentenceTransformer model
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+model = SentenceTransformer(EMBEDDING_MODEL)
 
 # Initialize Qdrant collections at startup
 try:
@@ -35,11 +46,35 @@ except Exception as e:
     print(f"Warning: Failed to initialize Qdrant collection: {str(e)}")
 
 # Initialize conversation storage
-conversation_storage = ConversationStorage("./storage")
+conversation_storage = ConversationStorage(STORAGE_DIR)
 
 @app.route("/")
 def health_check():
-    return jsonify({"status": "healthy"}), 200
+    """
+    Health check endpoint that also returns the current environment configuration
+    """
+    # Collect all environment variables (except sensitive ones if any)
+    env_config = {
+        "status": "healthy",
+        "environment": {
+            "QDRANT_HOST": QDRANT_HOST,
+            "QDRANT_PORT": QDRANT_PORT,
+            "COLLECTION_NAME": COLLECTION_NAME,
+            "CONVERSATIONS_COLLECTION": CONVERSATIONS_COLLECTION,
+            "LLM_MODEL": LLM_MODEL,
+            "OLLAMA_BASE_URL": OLLAMA_BASE_URL,
+            "STORAGE_DIR": STORAGE_DIR,
+            "UPLOAD_FOLDER": UPLOAD_FOLDER,
+            "EMBEDDING_MODEL": EMBEDDING_MODEL,
+            "EMBEDDING_DIMENSION": EMBEDDING_DIMENSION,
+            "DEBUG_MODE": DEBUG_MODE,
+            "WORKING_DIRECTORY": os.getcwd(),
+            "ENV_FILE_EXISTS": os.path.exists('.env')
+        },
+        "version": "1.0.0"
+    }
+    
+    return jsonify(env_config), 200
 
 @app.route("/upload", methods=["POST"])
 def upload_file():
