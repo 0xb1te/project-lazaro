@@ -166,19 +166,12 @@
   vertical-align: middle;
 }
 
-/* Style for separated lines with colon-dash pattern */
-.separated-line {
-  padding: 0.5rem 0;
-  margin: 0.5rem 0;
-  border-bottom: 1px solid var(--border-color, #e2e8f0);
-  display: block;
-}
-
 /* Make numbered list items clearer */
 .list-item {
   margin: 0.75rem 0;
   padding-left: 1.5rem;
   position: relative;
+  list-style-type: none;
 }
 
 .list-item strong {
@@ -365,4 +358,104 @@ pre code {
   .message-content {
     max-width: 85%;
   }
+}
+.text-strong {
+  font-weight: 800;
+}
+/* Human-readable formatting styles */
+
+/* Bullet lists */
+.readable-list {
+  margin: 1rem 0;
+  padding-left: 2rem;
+  list-style-type: disc;
+}
+
+.readable-item {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+/* Numbered items */
+.numbered-item {
+  display: flex;
+  margin: 1rem 0;
+  line-height: 1.5;
+}
+
+.numbered-item .number {
+  font-weight: bold;
+  min-width: 2rem;
+  color: #2563eb;
+}
+
+.numbered-item .content {
+  flex: 1;
+}
+
+/* Paragraphs */
+.readable-paragraph {
+  margin: 1rem 0;
+  line-height: 1.6;
+}
+
+/* Code and filenames */
+.filename {
+  background-color: #f3f3f3;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.inline-code {
+  font-family: monospace;
+  background-color: #f3f3f3;
+  padding: 0.15em 0.3em;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Headers */
+.readable-header {
+  margin: 1.5rem 0 1rem 0;
+  font-weight: bold;
+  color: #1e293b;
+}
+
+.header-1 {
+  font-size: 1.8rem;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+}
+
+.header-2 {
+  font-size: 1.5rem;
+}
+
+.header-3 {
+  font-size: 1.25rem;
+}
+
+/* Horizontal rule */
+.readable-hr {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Text emphasis */
+strong {
+  font-weight: bold;
+  color: #111827;
+}
+
+em {
+  font-style: italic;
 }

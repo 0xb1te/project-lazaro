@@ -588,16 +588,6 @@ function formatMessage(content) {
     return token;
   });
 
-  // Process lines with colon-dash pattern (but not within code blocks)
-  // Make sure not to match CSS properties
-  content = content.replace(/^([^:]+):\s*-\s*(.+)$/gm, (match, prefix, suffix) => {
-    // Don't match CSS properties or typical code patterns
-    if (prefix.trim().match(/^(margin|padding|border|color|font|background|width|height|display|position)/)) {
-      return match;
-    }
-    return `<div class="separated-line"><strong>${prefix}:</strong> ${suffix}</div>`;
-  });
-
   // Process thought blocks
   content = content.replace(/<think>([\s\S]*?)<\/think>/g, (match, thinking) => {
     return `
@@ -613,9 +603,61 @@ function formatMessage(content) {
     `;
   });
 
-  // Process numbered list items and ensure proper separation
+  // Process bullet lists (with proper indentation and spacing)
+  const bulletListLines = content.split('\n');
+  let inBulletList = false;
+  let bulletListHTML = '';
+  let processedLines = [];
+
+  for (let i = 0; i < bulletListLines.length; i++) {
+    const line = bulletListLines[i];
+
+    // Check if the line is a bullet point
+    if (line.trim().match(/^-\s+.+/)) {
+      // Start a new list if we're not already in one
+      if (!inBulletList) {
+        bulletListHTML = '<ul class="readable-list">';
+        inBulletList = true;
+      }
+
+      // Add the bullet point as a list item
+      const itemContent = line.trim().substring(1).trim();
+      bulletListHTML += `<li class="readable-item">${itemContent}</li>`;
+    } else {
+      // If we were in a list and now we're not, close the list
+      if (inBulletList) {
+        bulletListHTML += '</ul>';
+        processedLines.push(bulletListHTML);
+        bulletListHTML = '';
+        inBulletList = false;
+      }
+
+      // Add the non-bullet line
+      processedLines.push(line);
+    }
+  }
+
+  // Close any open list at the end
+  if (inBulletList) {
+    bulletListHTML += '</ul>';
+    processedLines.push(bulletListHTML);
+  }
+
+  content = processedLines.join('\n');
+
+  // Process numbered lists
   content = content.replace(/^(\d+)\.\s+(.+)$/gm, (match, number, text) => {
-    return `<div class="list-item ml-4"><strong>${number}.</strong> ${text}</div>`;
+    return `<div class="numbered-item"><span class="number">${number}.</span> <span class="content">${text}</span></div>`;
+  });
+
+  // Process paragraphs (add proper spacing between paragraphs)
+  content = content.replace(/(.+)\n\n(.+)/g, (match, para1, para2) => {
+    // Don't process if the paragraph is already in an HTML tag
+    if (para1.includes('<div') || para1.includes('<ul') || para1.includes('<p') ||
+      para2.includes('<div') || para2.includes('<ul') || para2.includes('<p')) {
+      return match;
+    }
+    return `<p class="readable-paragraph">${para1}</p>\n\n<p class="readable-paragraph">${para2}</p>`;
   });
 
   // Process <code></code> tags
@@ -626,11 +668,17 @@ function formatMessage(content) {
   // Process bold text
   content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
+  // Process italics
+  content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
   // Process markdown headers
   content = content.replace(/^(#{1,6})\s(.+)$/gm, (match, hashes, content) => {
     const level = hashes.length;
-    return `<h${level} class="markdown-header header-${level}">${content}</h${level}>`;
+    return `<h${level} class="readable-header header-${level}">${content}</h${level}>`;
   });
+
+  // Process horizontal rules
+  content = content.replace(/^---+$/gm, '<hr class="readable-hr">');
 
   // Restore inline code blocks with proper formatting
   inlineCodeBlocks.forEach((code, i) => {
