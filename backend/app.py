@@ -18,7 +18,10 @@ from .config import (
     UPLOAD_FOLDER,
     EMBEDDING_MODEL,
     EMBEDDING_DIMENSION,
-    DEBUG_MODE
+    DEBUG_MODE,
+    MAX_HISTORY_MESSAGES,
+    MAX_CONTEXT_LENGTH,
+    CONVERSATION_AWARE
 )
 from .utils.qdrant_handler import (
     init_collection, 
@@ -155,16 +158,16 @@ def get_answer_from_context(question, context, conversation_history=None):
     llm = OllamaLLM(
         model=LLM_MODEL,
         base_url=OLLAMA_BASE_URL,
-        num_ctx=4096,
+        num_ctx=MAX_CONTEXT_LENGTH,
         temperature=0.8,
         request_timeout=120.0,
     )
     
     # Format conversation history if provided
     conversation_context = ""
-    if conversation_history and len(conversation_history) > 0:
-        # Format previous messages (limit to last 5 to avoid context overflow)
-        prev_messages = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+    if CONVERSATION_AWARE and conversation_history and len(conversation_history) > 0:
+        # Format previous messages (limit based on MAX_HISTORY_MESSAGES config)
+        prev_messages = conversation_history[-MAX_HISTORY_MESSAGES:] if len(conversation_history) > MAX_HISTORY_MESSAGES else conversation_history
         conversation_context = "Previous conversation:\n"
         for msg in prev_messages:
             role = "User" if msg["role"] == "user" else "Assistant"
@@ -244,12 +247,15 @@ def ask_question_internal(question, conversation_id=None):
     # Extract text content from top documents
     context = " ".join([doc["text"] for doc in similar_docs])
     
-    # Get conversation history if conversation_id is provided
+    # Get conversation history if conversation_id is provided and conversation awareness is enabled
     conversation_history = None
-    if conversation_id:
+    if CONVERSATION_AWARE and conversation_id:
         conversation = conversation_storage.get_conversation(conversation_id)
         if conversation:
             conversation_history = conversation.get("messages", [])
+            if conversation_history:
+                # Log the number of conversation history messages being used
+                print(f"Using {len(conversation_history)} messages from conversation history")
     
     # Get answer with conversation history
     answer = get_answer_from_context(question, context, conversation_history)
