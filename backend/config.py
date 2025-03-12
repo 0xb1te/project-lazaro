@@ -32,6 +32,6 @@ EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 
 # Conversation settings
-MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "5"))  # Number of previous messages to include
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "15"))  # Number of previous messages to include
 MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "4096"))  # Max tokens for LLM context
 CONVERSATION_AWARE = os.getenv("CONVERSATION_AWARE", "True").lower() == "true"  # Enable/disable conversation history
