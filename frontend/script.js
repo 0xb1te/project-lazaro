@@ -518,6 +518,9 @@ function renderMessage(message) {
   const avatarElement = messageNode.querySelector(".message-avatar");
   const bubbleElement = messageNode.querySelector(".message-bubble");
 
+  // Make sure we have content
+  const content = message.content || '';
+
   // Set role-specific styles and content
   if (message.role === "user") {
     messageElement.classList.add("user");
@@ -526,6 +529,9 @@ function renderMessage(message) {
         <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
       </svg>
     `;
+
+    // Set message content as plain text for user messages
+    bubbleElement.textContent = content;
   } else if (message.role === "assistant" || message.role === "bot") {
     messageElement.classList.add("bot");
     avatarElement.innerHTML = `
@@ -534,6 +540,9 @@ function renderMessage(message) {
         <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
       </svg>
     `;
+
+    // Set message content with formatting for assistant messages
+    bubbleElement.innerHTML = formatMessage(content);
   } else if (message.role === "system") {
     messageElement.classList.add("system");
     avatarElement.innerHTML = `
@@ -541,18 +550,17 @@ function renderMessage(message) {
         <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
       </svg>
     `;
+
+    // Set message content with formatting for system messages
+    bubbleElement.innerHTML = formatMessage(content);
   }
 
-  // Make sure we have content
-  const content = message.content || '';
-
-  // Set message content
-  bubbleElement.innerHTML = formatMessage(content);
-
-  // Apply syntax highlighting to code blocks
-  Array.from(bubbleElement.querySelectorAll('pre code')).forEach(block => {
-    hljs.highlightElement(block);
-  });
+  // Apply syntax highlighting to code blocks (only needed for assistant and system messages)
+  if (message.role !== "user") {
+    Array.from(bubbleElement.querySelectorAll('pre code')).forEach(block => {
+      hljs.highlightElement(block);
+    });
+  }
 
   // Add the message to the chat history
   chatHistory.appendChild(messageElement);
@@ -650,6 +658,12 @@ function formatMessage(content) {
     return `<div class="numbered-item"><span class="number">${number}.</span> <span class="content">${text}</span></div>`;
   });
 
+  // Process markdown headers
+  content = content.replace(/^(#{1,6})\s(.+)$/gm, (match, hashes, content) => {
+    const level = hashes.length;
+    return `<h${level} class="readable-header header-${level}">${content}</h${level}>`;
+  });
+
   // Process paragraphs (add proper spacing between paragraphs)
   content = content.replace(/(.+)\n\n(.+)/g, (match, para1, para2) => {
     // Don't process if the paragraph is already in an HTML tag
@@ -671,12 +685,6 @@ function formatMessage(content) {
   // Process italics
   content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
 
-  // Process markdown headers
-  content = content.replace(/^(#{1,6})\s(.+)$/gm, (match, hashes, content) => {
-    const level = hashes.length;
-    return `<h${level} class="readable-header header-${level}">${content}</h${level}>`;
-  });
-
   // Process horizontal rules
   content = content.replace(/^---+$/gm, '<hr class="readable-hr">');
 
@@ -684,6 +692,9 @@ function formatMessage(content) {
   inlineCodeBlocks.forEach((code, i) => {
     content = content.replace(`___INLINE_CODE_${i}___`, `<span class="filename">${escapeHtml(code)}</span>`);
   });
+
+  // Whenever there is a hyphen, add a line jump
+  content = content.replace(/\s+-\s+/g, '<br>- ');
 
   // Restore code blocks with proper formatting
   codeBlocks.forEach((block, i) => {
