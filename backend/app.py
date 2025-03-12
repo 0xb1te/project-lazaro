@@ -21,7 +21,8 @@ from .config import (
     DEBUG_MODE,
     MAX_HISTORY_MESSAGES,
     MAX_CONTEXT_LENGTH,
-    CONVERSATION_AWARE
+    CONVERSATION_AWARE,
+    TEMPERATURE
 )
 from .utils.qdrant_handler import (
     init_collection, 
@@ -159,7 +160,7 @@ def get_answer_from_context(question, context, conversation_history=None):
         model=LLM_MODEL,
         base_url=OLLAMA_BASE_URL,
         num_ctx=MAX_CONTEXT_LENGTH,
-        temperature=0.8,
+        temperature=TEMPERATURE,
         request_timeout=120.0,
     )
     

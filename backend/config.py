@@ -11,7 +11,7 @@ COLLECTION_NAME = os.getenv("COLLECTION_NAME", "ai-rag-project")
 CONVERSATIONS_COLLECTION = os.getenv("CONVERSATIONS_COLLECTION", "conversations")
 
 # LLM configuration
-LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
+LLM_MODEL = os.getenv("LLM_MODEL", "hf.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF:Q8_0_L")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # Storage configuration
@@ -27,6 +27,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Embedding model configuration
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
+TEMPERATURE = float(os.getenv("EMBEDDING_TEMPERATURE", 0.4))
 
 # Application settings
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
