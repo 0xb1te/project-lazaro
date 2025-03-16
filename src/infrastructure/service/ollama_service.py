@@ -107,47 +107,47 @@ class OllamaService(LLMService):
         # Make request to Ollama API
         try:
             max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
-                    "stream": False
-                },
-                timeout=self.timeout
-            )
-            
-            # Check for successful response
-            if response.status_code == 200:
-                result = response.json()
-                return result.get("response", "")
-            else:
-                error_msg = f"Error from Ollama API: {response.status_code} - {response.text}"
-                self.logger.error(error_msg)
-                
-                # Only retry on certain status codes that might be temporary
-                if response.status_code in [429, 500, 502, 503, 504] and attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 2  # Exponential backoff
-                    self.logger.info(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                    continue
-                
-                return f"I'm sorry, I'm having trouble generating a response at the moment. Please try again later."
-                
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Request to Ollama API failed: {str(e)}")
-            
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 2
-                self.logger.info(f"Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-                continue
-            
-            return f"I'm sorry, I'm having trouble connecting to the language model service. Please try again later."
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        f"{self.base_url}/api/generate",
+                        json={
+                            "model": self.model_name,
+                            "prompt": prompt,
+                            "temperature": self.temperature,
+                            "max_tokens": self.max_tokens,
+                            "stream": False
+                        },
+                        timeout=self.timeout
+                    )
+                    
+                    # Check for successful response
+                    if response.status_code == 200:
+                        result = response.json()
+                        return result.get("response", "")
+                    else:
+                        error_msg = f"Error from Ollama API: {response.status_code} - {response.text}"
+                        self.logger.error(error_msg)
+                        
+                        # Only retry on certain status codes that might be temporary
+                        if response.status_code in [429, 500, 502, 503, 504] and attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 2  # Exponential backoff
+                            self.logger.info(f"Retrying in {wait_time} seconds...")
+                            time.sleep(wait_time)
+                            continue
+                        
+                        return f"I'm sorry, I'm having trouble generating a response at the moment. Please try again later."
+                        
+                except requests.exceptions.RequestException as e:
+                    self.logger.error(f"Request to Ollama API failed: {str(e)}")
+                    
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 2
+                        self.logger.info(f"Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                        continue
+                    
+                    return f"I'm sorry, I'm having trouble connecting to the language model service. Please try again later."
 
                 
         except requests.exceptions.RequestException as e:
