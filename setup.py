@@ -22,6 +22,13 @@ setup(
         # Machine Learning & Embeddings
         "sentence-transformers",
         
+        # Document Processing
+        "pypdf",
+        "docx2txt",
+        "mammoth",
+        "python-pptx",
+        "bs4",
+        
         # Utilities
         "python-dotenv"
     ]

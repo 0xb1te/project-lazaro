@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 import uuid
 
+from .utils.code_compressor import CodeCompressor
 from .utils.file_processor import process_file, process_zip_file
 from langchain_ollama import OllamaLLM
 from sentence_transformers import SentenceTransformer
@@ -52,6 +53,16 @@ except Exception as e:
 # Initialize conversation storage
 conversation_storage = ConversationStorage(STORAGE_DIR)
 
+# Set maximum content length to 100MB (or adjust as needed)
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB in bytes
+
+# You can also add a message for when files are too large
+@app.errorhandler(413)
+def request_entity_too_large(error):
+    return jsonify({
+        "error": "The file is too large. Maximum allowed size is 100MB."
+    }), 413
+
 @app.route("/")
 def health_check():
     """
@@ -97,7 +108,7 @@ def upload_file():
         if not conversation_id:
             conversation = conversation_storage.create_conversation(
                 title=f"Project: {file.filename}",
-                initial_message=f"I've indexed your project '{file.filename}'. What would you like to know about it?"
+                initial_message=f"I've indexed your project '{file.filename}' with code compression enabled. What would you like to know about it?"
             )
             conversation_id = conversation["id"]
         else:
@@ -130,16 +141,24 @@ def upload_file():
         document_info = {
             "id": str(uuid.uuid4()),
             "filename": file.filename,
-            "type": "zip" if file.filename.endswith(".zip") else "file"
+            "type": "zip" if file.filename.endswith(".zip") else "file",
+            "compression_enabled": True  # Indicate that compression was used
         }
         conversation_storage.add_document_to_conversation(conversation_id, document_info)
         
         # Clean up temporary file
         os.remove(file_path)
 
+        # Prepare the success message including compression info
+        if file.filename.endswith(".zip"):
+            message = "Project files indexed with code compression. You can now ask questions about your code with reduced token usage."
+        else:
+            message = "File indexed with code compression. You can now ask questions about it with reduced token usage."
+
         return jsonify({
-            "message": "File indexed successfully. You can now ask questions about it.",
-            "conversation_id": conversation_id
+            "message": message,
+            "conversation_id": conversation_id,
+            "compression_enabled": True
         }), 200
 
     except Exception as e:
@@ -159,16 +178,16 @@ def get_answer_from_context(question, context, conversation_history=None):
     llm = OllamaLLM(
         model=LLM_MODEL,
         base_url=OLLAMA_BASE_URL,
-        num_ctx=MAX_CONTEXT_LENGTH,
-        temperature=TEMPERATURE,
+        num_ctx=4096,
+        temperature=0.8,
         request_timeout=120.0,
     )
     
     # Format conversation history if provided
     conversation_context = ""
-    if CONVERSATION_AWARE and conversation_history and len(conversation_history) > 0:
-        # Format previous messages (limit based on MAX_HISTORY_MESSAGES config)
-        prev_messages = conversation_history[-MAX_HISTORY_MESSAGES:] if len(conversation_history) > MAX_HISTORY_MESSAGES else conversation_history
+    if conversation_history and len(conversation_history) > 0:
+        # Format previous messages (limit to last 5 to avoid context overflow)
+        prev_messages = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
         conversation_context = "Previous conversation:\n"
         for msg in prev_messages:
             role = "User" if msg["role"] == "user" else "Assistant"
@@ -199,22 +218,27 @@ def get_answer_from_context(question, context, conversation_history=None):
         5. **Context Awareness**:
         - Use both the document context provided and our conversation history to generate the answer.
         - Maintain continuity with previous responses when appropriate.
+        
+        6. **Code Compression Awareness**:
+        - Note that the code you're analyzing has been compressed to reduce token usage.
+        - Some variable names and identifiers might have been shortened.
+        - Focus on explaining the structure and logic rather than the specific variable names when appropriate.
 
-        6. **Professional Tone**:
+        7. **Professional Tone**:
         - Use a professional and friendly tone.
         - Avoid jargon unless it is necessary and clearly explained.
 
-        7. **Answer if you the user calls you LAZARO**:
+        8. **Answer if you the user calls you LAZARO**:
         - Answer without taking into account the provided codebase.
         - If you are called LAZARO, you are free to use information outside the context.
 
-        8. **Preserve Existing Functionality**:
+        9. **Preserve Existing Functionality**:
         - When suggesting code changes, always identify and preserve existing functionality.
         - Clearly mark which parts of the code remain unchanged and which parts are modified.
         - If suggesting new code, explain how it integrates with the existing system without breaking current features.
         - When modifying code, include comments explaining the rationale for each change.
 
-        9. **Implementation Guidelines**:
+        10. **Implementation Guidelines**:
         - Present code modifications as targeted changes rather than complete rewrites when possible.
         - For any suggested changes, explain potential impacts on other parts of the codebase.
         - Provide fallback mechanisms or error handling for any new features.
@@ -232,6 +256,7 @@ def get_answer_from_context(question, context, conversation_history=None):
 
     # Get the answer
     answer = llm.invoke(prompt)
+    
     return answer
 
 def ask_question_internal(question, conversation_id=None):

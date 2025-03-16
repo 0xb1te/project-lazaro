@@ -19,3 +19,9 @@ sentence-transformers
 
 # Utilities
 python-dotenv
+
+# Document Processing
+pypdf
+docx2txt
+mammoth
+python-pptx
