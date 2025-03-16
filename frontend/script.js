@@ -40,120 +40,314 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Event Listeners
+let dragCounter = 0;
+let isDraggingFile = false;
+
+// This is a completely fresh, minimal implementation
+
+// Add these at the top of your script.js file
+let dragActive = false;
+
+// Replace your entire setupEventListeners function with this simpler version
 function setupEventListeners() {
   // Toggle sidebar
   toggleSidebarBtn.addEventListener("click", () => {
     sidebar.classList.toggle("collapsed");
   });
 
-  // Drag and drop events
-  ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
-    document.body.addEventListener(eventName, preventDefaults, false);
-  });
-
-  document.body.addEventListener("dragenter", () => {
-    dropOverlay.style.display = "flex";
-  });
-
-  dropOverlay.addEventListener("dragleave", e => {
-    const rect = dropOverlay.getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-
-    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
-      dropOverlay.style.display = "none";
+  // ==== SIMPLIFIED DRAG AND DROP ====
+  // Document-level drag events
+  document.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (!dragActive) {
+      dragActive = true;
+      if (dropOverlay) {
+        dropOverlay.style.display = 'flex';
+      }
     }
   });
 
-  dropOverlay.addEventListener("drop", e => {
-    dropOverlay.style.display = "none";
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      uploadFile(files[0]);
+  document.addEventListener('dragleave', (e) => {
+    // Only consider leaving if we're leaving the window
+    if (e.clientX <= 0 || e.clientX >= window.innerWidth ||
+      e.clientY <= 0 || e.clientY >= window.innerHeight) {
+      dragActive = false;
+      if (dropOverlay) {
+        dropOverlay.style.display = 'none';
+      }
     }
   });
+
+  document.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragActive = false;
+
+    if (dropOverlay) {
+      dropOverlay.style.display = 'none';
+    }
+
+    console.log("Drop event detected with files:", e.dataTransfer);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      console.log("File to upload:", file.name, file.size, file.type);
+      uploadFile(file);
+    } else {
+      console.warn("No files found in drop event");
+    }
+  });
+
+  // Drop overlay events
+  if (dropOverlay) {
+    dropOverlay.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    dropOverlay.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragActive = false;
+      dropOverlay.style.display = 'none';
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        uploadFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
 
   // Drop area in sidebar
-  dropArea.addEventListener("drop", e => {
-    preventDefaults(e);
+  if (dropArea) {
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.classList.add('border-blue-500');
+      dropArea.classList.add('bg-blue-50');
+    });
+
+    dropArea.addEventListener('dragleave', (e) => {
+      dropArea.classList.remove('border-blue-500');
+      dropArea.classList.remove('bg-blue-50');
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragActive = false;
+
+      dropArea.classList.remove('border-blue-500');
+      dropArea.classList.remove('bg-blue-50');
+
+      if (dropOverlay) {
+        dropOverlay.style.display = 'none';
+      }
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        uploadFile(e.dataTransfer.files[0]);
+      }
+    });
+  }
+  // ==== END DRAG AND DROP ====
+
+  // File input
+  if (fileInput) {
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files.length > 0) {
+        uploadFile(e.target.files[0]);
+      }
+    });
+  }
+
+  // The rest of your event listeners...
+  // Chat input handling
+  if (chatInput) {
+    chatInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    });
+
+    chatInput.addEventListener("input", () => {
+      chatInput.style.height = "auto";
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + "px";
+    });
+  }
+
+  // Buttons
+  if (sendButton) {
+    sendButton.addEventListener("click", handleSendMessage);
+  }
+
+  if (debugButton) {
+    debugButton.addEventListener("click", handleDebugClick);
+  }
+
+  if (newChatButton) {
+    newChatButton.addEventListener("click", createNewConversation);
+  }
+
+  // Edit title functionality
+  if (editTitleBtn && editTitleModal && editTitleInput) {
+    editTitleBtn.addEventListener("click", () => {
+      if (activeConversationId) {
+        editTitleInput.value = currentConversationTitle.textContent.trim();
+        editTitleModal.style.display = "flex";
+        editTitleInput.focus();
+      }
+    });
+
+    if (saveEditTitleBtn) {
+      saveEditTitleBtn.addEventListener("click", async () => {
+        const newTitle = editTitleInput.value.trim();
+        if (newTitle && activeConversationId) {
+          await updateConversationTitle(activeConversationId, newTitle);
+          editTitleModal.style.display = "none";
+        }
+      });
+    }
+
+    if (cancelEditTitleBtn) {
+      cancelEditTitleBtn.addEventListener("click", () => {
+        editTitleModal.style.display = "none";
+      });
+    }
+
+    // Close modal on outside click
+    editTitleModal.addEventListener("click", (e) => {
+      if (e.target === editTitleModal) {
+        editTitleModal.style.display = "none";
+      }
+    });
+
+    // Handle Enter key in title edit input
+    editTitleInput.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const newTitle = editTitleInput.value.trim();
+        if (newTitle && activeConversationId) {
+          await updateConversationTitle(activeConversationId, newTitle);
+          editTitleModal.style.display = "none";
+        }
+      } else if (e.key === "Escape") {
+        editTitleModal.style.display = "none";
+      }
+    });
+  }
+}
+
+// Drag and Drop Event Handlers
+function handleDragEnter(e) {
+  e.preventDefault();
+
+  // Check if actually dragging a file
+  if (e.dataTransfer.types && (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.indexOf('Files') !== -1)) {
+    isDraggingFile = true;
+    dragCounter++;
+
+    // Only show the overlay when we detect a file is being dragged
+    if (dropOverlay && dragCounter === 1) {
+      dropOverlay.style.display = "flex";
+    }
+  }
+}
+
+function handleDragLeave(e) {
+  e.preventDefault();
+
+  if (isDraggingFile) {
+    dragCounter--;
+
+    // Only hide when we've left the document completely
+    if (dragCounter <= 0) {
+      dragCounter = 0; // Ensure we don't get negative values
+      if (dropOverlay) {
+        dropOverlay.style.display = "none";
+      }
+    }
+  }
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+
+  if (isDraggingFile) {
+    // Keep the overlay visible
+    if (dropOverlay) {
+      dropOverlay.style.display = "flex";
+    }
+  }
+  return false;
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+
+  if (isDraggingFile) {
+    isDraggingFile = false;
+    dragCounter = 0;
+
+    if (dropOverlay) {
+      dropOverlay.style.display = "none";
+    }
+
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       uploadFile(files[0]);
     }
-  });
-
-  // File input
-  fileInput.addEventListener("change", e => {
-    if (e.target.files.length > 0) {
-      uploadFile(e.target.files[0]);
-    }
-  });
-
-  // Chat input handling
-  chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  });
-
-  chatInput.addEventListener("input", () => {
-    chatInput.style.height = "auto";
-    chatInput.style.height = Math.min(chatInput.scrollHeight, 128) + "px";
-  });
-
-  // Buttons
-  sendButton.addEventListener("click", handleSendMessage);
-  debugButton.addEventListener("click", handleDebugClick);
-  newChatButton.addEventListener("click", createNewConversation);
-
-  // Edit title functionality
-  editTitleBtn.addEventListener("click", () => {
-    if (activeConversationId) {
-      editTitleInput.value = currentConversationTitle.textContent.trim();
-      editTitleModal.style.display = "flex";
-      editTitleInput.focus();
-    }
-  });
-
-  saveEditTitleBtn.addEventListener("click", async () => {
-    const newTitle = editTitleInput.value.trim();
-    if (newTitle && activeConversationId) {
-      await updateConversationTitle(activeConversationId, newTitle);
-      editTitleModal.style.display = "none";
-    }
-  });
-
-  cancelEditTitleBtn.addEventListener("click", () => {
-    editTitleModal.style.display = "none";
-  });
-
-  // Close modal on outside click
-  editTitleModal.addEventListener("click", (e) => {
-    if (e.target === editTitleModal) {
-      editTitleModal.style.display = "none";
-    }
-  });
-
-  // Handle Enter key in title edit input
-  editTitleInput.addEventListener("keydown", async (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const newTitle = editTitleInput.value.trim();
-      if (newTitle && activeConversationId) {
-        await updateConversationTitle(activeConversationId, newTitle);
-        editTitleModal.style.display = "none";
-      }
-    } else if (e.key === "Escape") {
-      editTitleModal.style.display = "none";
-    }
-  });
+  }
+  return false;
 }
 
-// File Handling
-function preventDefaults(e) {
+// Drop Area specific handlers
+function handleDropAreaEnter(e) {
   e.preventDefault();
   e.stopPropagation();
+
+  if (isDraggingFile) {
+    dropArea.classList.add("border-blue-500");
+    dropArea.classList.add("bg-blue-50");
+  }
+  return false;
+}
+
+function handleDropAreaLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  dropArea.classList.remove("border-blue-500");
+  dropArea.classList.remove("bg-blue-50");
+  return false;
+}
+
+function handleDropAreaOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (isDraggingFile) {
+    dropArea.classList.add("border-blue-500");
+    dropArea.classList.add("bg-blue-50");
+  }
+  return false;
+}
+
+function handleDropAreaDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  dropArea.classList.remove("border-blue-500");
+  dropArea.classList.remove("bg-blue-50");
+
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    uploadFile(files[0]);
+  }
+  return false;
+}
+
+// Update preventDefaults function
+function preventDefaults(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  return false;
 }
 
 async function uploadFile(file) {

@@ -162,16 +162,19 @@
     </div>
   </div>
 
-  <!-- Drop overlay -->
-  <div id="drop-overlay" class="fixed inset-0 bg-slate-900/70 items-center justify-center z-50 hidden">
-    <div class="bg-white p-6 rounded-xl border-2 border-dashed border-blue-500 w-96 text-center">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-blue-500 mb-4" fill="none"
-        viewBox="0 0 24 24" stroke="currentColor">
+  <!-- Replace your drop-overlay div with this version -->
+  <div id="drop-overlay"
+    style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(15, 23, 42, 0.7); z-index: 1000; align-items: center; justify-content: center;">
+    <div
+      style="background-color: white; padding: 24px; border-radius: 12px; border: 2px dashed #3b82f6; width: 384px; max-width: 90%; text-align: center;">
+      <svg xmlns="http://www.w3.org/2000/svg"
+        style="width: 64px; height: 64px; margin: 0 auto 16px auto; color: #3b82f6;" fill="none" viewBox="0 0 24 24"
+        stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
       </svg>
-      <h3 class="text-xl font-semibold text-slate-800 mb-2">Drop files here</h3>
-      <p class="text-slate-600">Drag your files or projects in .zip format</p>
+      <h3 style="font-size: 20px; font-weight: 600; color: #1e293b; margin-bottom: 8px;">Drop files here</h3>
+      <p style="color: #64748b;">Drag your files or projects in .zip format</p>
     </div>
   </div>
 
@@ -183,6 +186,60 @@
   </div>
 
   <script src="script.js"></script>
+
+  <script>
+    // Debug helper to test drag and drop
+    window.addEventListener('DOMContentLoaded', function () {
+      console.log('DEBUG: Testing drag and drop functionality');
+
+      const overlay = document.getElementById('drop-overlay');
+      const dropArea = document.getElementById('drop-area');
+
+      // Test if elements exist
+      console.log('DEBUG: Drop overlay exists:', !!overlay);
+      console.log('DEBUG: Drop area exists:', !!dropArea);
+
+      // Add a manual test button for overlay visibility
+      const testButton = document.createElement('button');
+      testButton.innerText = 'Test Overlay';
+      testButton.style.position = 'fixed';
+      testButton.style.right = '10px';
+      testButton.style.top = '10px';
+      testButton.style.zIndex = '9999';
+      testButton.style.padding = '5px 10px';
+      testButton.style.background = '#2563eb';
+      testButton.style.color = 'white';
+      testButton.style.borderRadius = '5px';
+      testButton.style.cursor = 'pointer';
+
+      testButton.addEventListener('click', function () {
+        if (overlay) {
+          if (overlay.style.display === 'none') {
+            console.log('DEBUG: Showing overlay');
+            overlay.style.display = 'flex';
+          } else {
+            console.log('DEBUG: Hiding overlay');
+            overlay.style.display = 'none';
+          }
+        } else {
+          console.log('DEBUG: Overlay element not found!');
+        }
+      });
+
+      document.body.appendChild(testButton);
+
+      // Log drag events
+      const logDragEvent = function (e) {
+        console.log(`DEBUG: Drag event "${e.type}" detected`);
+      };
+
+      ['dragstart', 'drag', 'dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+        document.addEventListener(event, logDragEvent, false);
+      });
+
+      console.log('DEBUG: Drag event listeners added');
+    });
+  </script>
 </body>
 
 </html>
