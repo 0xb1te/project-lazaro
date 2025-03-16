@@ -1,10 +1,7 @@
-# requirements.txt
-
 # Core Framework Dependencies
 flask
 flask-cors
 waitress
-streamlit
 
 # LangChain and Related
 langchain
@@ -16,9 +13,11 @@ qdrant-client
 
 # Machine Learning & Embeddings
 sentence-transformers
+numpy
 
 # Utilities
 python-dotenv
+requests
 
 # Document Processing
 pypdf

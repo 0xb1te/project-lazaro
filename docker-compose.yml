@@ -22,7 +22,6 @@ services:
     env_file:
       - .env
     environment:
-      - FLASK_APP=backend.app
       - FLASK_ENV=production
       - STORAGE_DIR=/app/storage
       - UPLOAD_FOLDER=/app/uploads
