@@ -78,25 +78,49 @@ class ConversationService:
         return ConversationDTO.from_dict(conversation_data)
     
     def get_all_conversations(self) -> List[ConversationListItemDTO]:
-        """
-        Get all conversations as summary list items.
-        
-        Returns:
-            List of DTOs with conversation summary data
-        """
         conversations_data = self.conversation_repository.find_all()
         
-        # Convert to DTOs and create summary list items
         result = []
         for conversation_data in conversations_data:
-            conversation_dto = ConversationDTO.from_dict(conversation_data)
-            # Make sure you're accessing properties correctly here
-            # If conversation_dto is not iterable, don't try to iterate over it
-            list_item = ConversationListItemDTO.from_conversation(conversation_dto)
-            result.append(list_item)
+            try:
+                # Create a ConversationDTO first
+                conversation_dto = ConversationDTO.from_dict(conversation_data)
+                
+                # Get message count with proper checks
+                message_count = 0
+                last_message = None
+                if hasattr(conversation_dto, 'messages'):
+                    messages = conversation_dto.messages
+                    if isinstance(messages, list):
+                        message_count = len(messages)
+                        if message_count > 0:
+                            last_message = messages[-1]
+                
+                # Get document count with proper checks
+                document_count = 0
+                if hasattr(conversation_dto, 'documents'):
+                    documents = conversation_dto.documents
+                    if isinstance(documents, list):
+                        document_count = len(documents)
+                
+                # Create list item
+                list_item = ConversationListItemDTO(
+                    id=conversation_dto.id,
+                    title=conversation_dto.title,
+                    created_at=conversation_dto.created_at,
+                    updated_at=conversation_dto.updated_at,
+                    message_count=message_count,
+                    document_count=document_count,
+                    last_message=last_message
+                )
+                
+                result.append(list_item)
+            except Exception as e:
+                # Log the error and continue with the next conversation
+                print(f"Error processing conversation {conversation_data.get('id', 'unknown')}: {str(e)}")
+                continue
         
         return result
-
     
     def update_conversation_title(self, conversation_id: str, title: str) -> Optional[ConversationDTO]:
         """
@@ -234,8 +258,7 @@ class ConversationService:
         # Convert to DTO
         return DocumentDTO.from_dict(result)
     
-    def get_conversation_history(self, conversation_id: str, 
-                                max_messages: int = 10) -> List[MessageDTO]:
+    def get_conversation_history(self, conversation_id: str, max_messages: int = 10) -> List[MessageDTO]:
         """
         Get the message history for a conversation.
         
@@ -246,16 +269,26 @@ class ConversationService:
         Returns:
             List of message DTOs (most recent last)
         """
-        conversation_dto = self.get_conversation(conversation_id)
+        conversation_data = self.conversation_repository.find_by_id(conversation_id)
         
-        if not conversation_dto:
+        if not conversation_data:
             return []
         
-        messages = conversation_dto.messages
+        # Get messages directly from the dictionary data
+        messages_data = conversation_data.get("messages", [])
+        
+        # Convert each message dictionary to MessageDTO
+        messages = []
+        for msg_data in messages_data:
+            try:
+                msg = MessageDTO.from_dict(msg_data)
+                messages.append(msg)
+            except Exception as e:
+                print(f"Error processing message: {str(e)}")
         
         # Return most recent messages
         return messages[-max_messages:] if len(messages) > max_messages else messages
-    
+  
     def get_conversation_documents(self, conversation_id: str) -> List[DocumentDTO]:
         """
         Get all documents associated with a conversation.
@@ -271,4 +304,5 @@ class ConversationService:
         if not conversation_dto:
             return []
         
-        return conversation_dto.documents
+        # Ensure documents is a list before returning
+        return conversation_dto.documents if hasattr(conversation_dto, 'documents') and isinstance(conversation_dto.documents, list) else []

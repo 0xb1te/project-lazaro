@@ -30,6 +30,11 @@ class MessageDTO:
             "content": self.content,
             "timestamp": self.timestamp
         }
+    
+    def __iter__(self):
+        """Make ConversationDTO iterable to prevent runtime errors."""
+        # Return an empty iterator by default
+        return iter([])
 
 @dataclass
 class DocumentDTO:
@@ -61,6 +66,11 @@ class DocumentDTO:
             "added_at": self.added_at,
             "metadata": self.metadata
         }
+    
+    def __iter__(self):
+        """Make ConversationDTO iterable to prevent runtime errors."""
+        # Return an empty iterator by default
+        return iter([])
 
 @dataclass
 class ConversationDTO:
@@ -98,6 +108,11 @@ class ConversationDTO:
             "messages": [msg.to_dict() for msg in self.messages],
             "documents": [doc.to_dict() for doc in self.documents]
         }
+    
+    def __iter__(self):
+        """Make ConversationDTO iterable to prevent runtime errors."""
+        # Return an empty iterator by default
+        return iter([])
 
 @dataclass
 class ConversationListItemDTO:
@@ -115,7 +130,7 @@ class ConversationListItemDTO:
     def from_conversation(cls, conversation: ConversationDTO) -> 'ConversationListItemDTO':
         """Create a ConversationListItemDTO from a ConversationDTO."""
         last_message = None
-        if conversation.messages:
+        if conversation.messages and len(conversation.messages) > 0:
             last_message = conversation.messages[-1]
         
         return cls(
@@ -143,3 +158,8 @@ class ConversationListItemDTO:
             result["last_message"] = self.last_message.to_dict()
         
         return result
+    
+    def __iter__(self):
+        """Make ConversationDTO iterable to prevent runtime errors."""
+        # Return an empty iterator by default
+        return iter([])

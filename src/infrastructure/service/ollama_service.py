@@ -1,14 +1,16 @@
 # src/infrastructure/service/ollama_service.py
 import logging
-import json
+import time
 import requests
 from typing import List, Dict, Any, Optional
+import json
 
+from langchain_ollama import OllamaLLM
 from src.domain.port.service.llm_service import LLMService
 
 class OllamaService(LLMService):
     """
-    Ollama-based implementation of the LLMService interface.
+    Ollama-based implementation of the LLMService interface using LangChain.
     Uses a self-hosted Ollama instance to generate responses.
     """
     
@@ -36,6 +38,57 @@ class OllamaService(LLMService):
         self.max_tokens = max_tokens
         self.timeout = timeout
         self.logger = logging.getLogger(__name__)
+        
+        # Check if Ollama is available during initialization
+        self._check_ollama_availability()
+    
+    def _check_ollama_availability(self):
+        """
+        Check if Ollama server is available and log appropriate messages.
+        """
+        try:
+            # Try a simple health check
+            response = requests.get(f"{self.base_url}/api/health", timeout=5)
+            if response.status_code == 200:
+                self.logger.info(f"Ollama server is available at {self.base_url}")
+            else:
+                self.logger.warning(f"Ollama server returned status code {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            self.logger.warning(f"Could not connect to Ollama server at {self.base_url}: {str(e)}")
+    
+    def _get_ollama_client(self):
+        """
+        Create and return a new OllamaLLM client.
+        """
+        return OllamaLLM(
+            model=self.model_name,
+            base_url=self.base_url,
+            num_ctx=self.max_tokens,
+            temperature=self.temperature,
+            request_timeout=self.timeout
+        )
+    
+    def _get_fallback_response(self, question: str) -> str:
+        """
+        Generate a fallback response when Ollama is unavailable.
+        
+        Args:
+            question: The user's question
+            
+        Returns:
+            Fallback response
+        """
+        return (
+            "I apologize, but I'm currently unable to process your request because the language model "
+            "service (Ollama) is not available. This could be due to the server being down, a network "
+            "issue, or a configuration problem.\n\n"
+            "Here are some steps that might help:\n"
+            "1. Ensure that the Ollama server is running\n"
+            "2. Check if the correct model is loaded in Ollama\n"
+            "3. Verify that the configuration points to the correct Ollama URL\n"
+            "4. Check system resources (memory, CPU) to ensure they are sufficient\n\n"
+            "If you're an administrator, please check the logs for more details about the connection error."
+        )
     
     def generate_response(self, 
                          question: str, 
@@ -52,107 +105,108 @@ class OllamaService(LLMService):
         Returns:
             Generated response text
         """
-        # Format conversation history
-        formatted_history = ""
-        if conversation_history and len(conversation_history) > 0:
-            # Limit to last 5 messages to avoid context overflow
-            recent_history = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
-            formatted_history = "Previous conversation:\n"
-            for msg in recent_history:
-                role = "User" if msg["role"] == "user" else "Assistant"
-                formatted_history += f"{role}: {msg['content']}\n\n"
-        
-        # Create prompt template
-        prompt = f"""
-        You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
-        if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
-
-        1. **Code Formatting**:
-        - Every block of code should be placed between `<code></code>` tags.
-        - Use proper indentation and syntax highlighting for readability.
-
-        2. **Code Quality**:
-        - Follow SOLID principles.
-        - Ensure the code is clean, modular, and easy to maintain.
-
-        3. **Code Review**:
-        - Review your code to ensure it is functional and free of errors.
-        - Do not share non-working or incomplete code.
-
-        4. **Explanation**:
-        - Provide a clear and concise explanation of the code, always specify the name of the file you are talking about.
-        - Explain how the code works and why it solves the problem.
-        - Use bullet points or numbered lists for step-by-step explanations if necessary.
-
-        5. **Context Awareness**:
-        - Use both the document context provided and our conversation history to generate the answer.
-        - Maintain continuity with previous responses when appropriate.
-        
-        6. **Code Compression Awareness**:
-        - Note that the code you're analyzing has been compressed to reduce token usage.
-        - Some variable names and identifiers might have been shortened.
-        - Focus on explaining the structure and logic rather than the specific variable names when appropriate.
-
-        {formatted_history}
-
-        Document Context:
-        {context}
-
-        Current Question:
-        {question}
-
-        Answer:
-        """
-        
-        # Make request to Ollama API
         try:
+            # Format conversation history
+            formatted_history = ""
+            if conversation_history and len(conversation_history) > 0:
+                try:
+                    # Limit to last 5 messages to avoid context overflow
+                    recent_history = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+                    formatted_history = "Previous conversation:\n"
+                    for msg in recent_history:
+                        role = "User" if msg["role"] == "user" else "Assistant"
+                        formatted_history += f"{role}: {msg['content']}\n\n"
+                except Exception as e:
+                    self.logger.error(f"Error processing conversation history: {str(e)}")
+                    formatted_history = ""
+            
+            # Create prompt template
+            prompt = f"""
+            You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
+            if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
+
+            1. **Code Formatting**:
+            - Every block of code should be placed between `<code></code>` tags.
+            - Use proper indentation and syntax highlighting for readability.
+
+            2. **Code Quality**:
+            - Follow SOLID principles.
+            - Ensure the code is clean, modular, and easy to maintain.
+
+            3. **Code Review**:
+            - Review your code to ensure it is functional and free of errors.
+            - Do not share non-working or incomplete code.
+
+            4. **Explanation**:
+            - Provide a clear and concise explanation of the code, always specify the name of the file you are talking about.
+            - Explain how the code works and why it solves the problem.
+            - Use bullet points or numbered lists for step-by-step explanations if necessary.
+
+            5. **Context Awareness**:
+            - Use both the document context provided and our conversation history to generate the answer.
+            - Maintain continuity with previous responses when appropriate.
+            
+            6. **Code Compression Awareness**:
+            - Note that the code you're analyzing has been compressed to reduce token usage.
+            - Some variable names and identifiers might have been shortened.
+            - Focus on explaining the structure and logic rather than the specific variable names when appropriate.
+
+            {formatted_history}
+
+            Document Context:
+            {context}
+
+            Current Question:
+            {question}
+
+            Answer:
+            """
+            
+            # Add robust retry logic
             max_retries = 3
+            retry_delay = 2  # seconds
+            last_error = None
+            
             for attempt in range(max_retries):
                 try:
-                    response = requests.post(
-                        f"{self.base_url}/api/generate",
-                        json={
-                            "model": self.model_name,
-                            "prompt": prompt,
-                            "temperature": self.temperature,
-                            "max_tokens": self.max_tokens,
-                            "stream": False
-                        },
-                        timeout=self.timeout
-                    )
+                    # Create a fresh client for each attempt
+                    llm = self._get_ollama_client()
                     
-                    # Check for successful response
-                    if response.status_code == 200:
-                        result = response.json()
-                        return result.get("response", "")
+                    # Get the answer with timeout handling
+                    answer = llm.invoke(prompt)
+                    
+                    # If we got here, the request succeeded
+                    if answer and isinstance(answer, str) and len(answer.strip()) > 0:
+                        return answer
                     else:
-                        error_msg = f"Error from Ollama API: {response.status_code} - {response.text}"
-                        self.logger.error(error_msg)
-                        
-                        # Only retry on certain status codes that might be temporary
-                        if response.status_code in [429, 500, 502, 503, 504] and attempt < max_retries - 1:
-                            wait_time = (attempt + 1) * 2  # Exponential backoff
-                            self.logger.info(f"Retrying in {wait_time} seconds...")
-                            time.sleep(wait_time)
-                            continue
-                        
-                        return f"I'm sorry, I'm having trouble generating a response at the moment. Please try again later."
-                        
-                except requests.exceptions.RequestException as e:
-                    self.logger.error(f"Request to Ollama API failed: {str(e)}")
-                    
-                    if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 2
-                        self.logger.info(f"Retrying in {wait_time} seconds...")
-                        time.sleep(wait_time)
-                        continue
-                    
-                    return f"I'm sorry, I'm having trouble connecting to the language model service. Please try again later."
-
+                        self.logger.warning(f"Empty response from Ollama (attempt {attempt+1}/{max_retries})")
+                        # Try again if we got an empty response
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            return self._get_fallback_response(question)
                 
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Request to Ollama API failed: {str(e)}")
-            return f"Error connecting to Ollama service: {str(e)}"
+                except Exception as e:
+                    last_error = e
+                    self.logger.warning(f"Error on attempt {attempt+1}/{max_retries}: {str(e)}")
+                    
+                    # Check if this is the last attempt
+                    if attempt < max_retries - 1:
+                        self.logger.info(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # This was the last attempt, log the final error
+                        self.logger.error(f"Final error after {max_retries} attempts: {str(e)}")
+            
+            # If we get here, all retries failed
+            self.logger.error(f"All {max_retries} attempts failed. Last error: {str(last_error)}")
+            return self._get_fallback_response(question)
+            
+        except Exception as e:
+            self.logger.error(f"Error generating response: {str(e)}")
+            return self._get_fallback_response(question)
     
     def get_model_name(self) -> str:
         """
@@ -188,30 +242,48 @@ class OllamaService(LLMService):
             Generated text
         """
         try:
-            response = requests.post(
-                f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
-                    "stream": False
-                },
-                timeout=self.timeout
-            )
+            # Add robust retry logic
+            max_retries = 3
+            retry_delay = 2  # seconds
+            last_error = None
             
-            # Check for successful response
-            if response.status_code == 200:
-                result = response.json()
-                return result.get("response", "")
-            else:
-                error_msg = f"Error from Ollama API: {response.status_code} - {response.text}"
-                self.logger.error(error_msg)
-                return f"Error generating response: {response.status_code}"
+            for attempt in range(max_retries):
+                try:
+                    # Create a fresh client for each attempt
+                    llm = self._get_ollama_client()
+                    
+                    # Get the answer
+                    answer = llm.invoke(prompt)
+                    
+                    # If we got here, the request succeeded
+                    if answer and isinstance(answer, str) and len(answer.strip()) > 0:
+                        return answer
+                    else:
+                        self.logger.warning(f"Empty response from Ollama (attempt {attempt+1}/{max_retries})")
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            return "I apologize, but I was unable to generate a response. The language model returned an empty result."
                 
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Request to Ollama API failed: {str(e)}")
-            return f"Error connecting to Ollama service: {str(e)}"
+                except Exception as e:
+                    last_error = e
+                    self.logger.warning(f"Error on attempt {attempt+1}/{max_retries}: {str(e)}")
+                    
+                    if attempt < max_retries - 1:
+                        self.logger.info(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        self.logger.error(f"Final error after {max_retries} attempts: {str(e)}")
+            
+            # If we get here, all retries failed
+            self.logger.error(f"All {max_retries} attempts failed. Last error: {str(last_error)}")
+            return f"I'm sorry, I encountered an error while generating a response. The language model service may be unavailable. Error details: {str(last_error)}"
+            
+        except Exception as e:
+            self.logger.error(f"Error generating response: {str(e)}")
+            return f"I'm sorry, I encountered an error while generating a response: {str(e)}"
     
     def generate_structured_output(self, 
                                  prompt: str, 
@@ -237,24 +309,62 @@ class OllamaService(LLMService):
         Ensure your response is valid JSON that matches this schema exactly.
         """
         
-        # Generate response
-        response_text = self.generate_with_prompt(structured_prompt)
+        # Generate response with retry logic
+        max_retries = 3
+        retry_delay = 2  # seconds
         
-        # Extract JSON from the response
-        try:
-            # Look for JSON within the response
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            
-            if json_start >= 0 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                return json.loads(json_str)
-            else:
-                # Try to parse the entire response as JSON
-                return json.loads(response_text)
-        except json.JSONDecodeError:
-            self.logger.error("Failed to parse JSON from response")
-            return {"error": "Failed to generate structured output", "raw_response": response_text}
+        for attempt in range(max_retries):
+            try:
+                # Generate response
+                response_text = self.generate_with_prompt(structured_prompt)
+                
+                # Extract JSON from the response
+                try:
+                    # Look for JSON within the response
+                    json_start = response_text.find('{')
+                    json_end = response_text.rfind('}') + 1
+                    
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = response_text[json_start:json_end]
+                        return json.loads(json_str)
+                    else:
+                        # Try to parse the entire response as JSON
+                        return json.loads(response_text)
+                    
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Failed to parse JSON from response (attempt {attempt+1}/{max_retries}): {str(e)}")
+                    
+                    if attempt < max_retries - 1:
+                        self.logger.info(f"Retrying in {retry_delay} seconds...")
+                        time.sleep(retry_delay)
+                        retry_delay *= 2  # Exponential backoff
+                    else:
+                        # Last attempt failed, return error info
+                        return {
+                            "error": "Failed to generate structured output",
+                            "raw_response": response_text,
+                            "message": str(e)
+                        }
+                        
+            except Exception as e:
+                self.logger.error(f"Error in generate_structured_output (attempt {attempt+1}/{max_retries}): {str(e)}")
+                
+                if attempt < max_retries - 1:
+                    self.logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    # Last attempt failed, return error info
+                    return {
+                        "error": "Failed to generate structured output",
+                        "message": str(e)
+                    }
+        
+        # This should never be reached due to the returns in the loop,
+        # but added as a fallback
+        return {
+            "error": "Failed to generate structured output after all retry attempts"
+        }
     
     def check_model_availability(self) -> bool:
         """
@@ -264,15 +374,26 @@ class OllamaService(LLMService):
             True if available, False otherwise
         """
         try:
-            response = requests.get(
-                f"{self.base_url}/api/tags",
-                timeout=5
-            )
+            # First, check if Ollama server is accessible
+            try:
+                response = requests.get(f"{self.base_url}/api/health", timeout=5)
+                if response.status_code != 200:
+                    self.logger.warning(f"Ollama server health check failed: {response.status_code}")
+                    return False
+            except requests.exceptions.RequestException as e:
+                self.logger.warning(f"Could not connect to Ollama server: {str(e)}")
+                return False
             
-            if response.status_code == 200:
-                tags = response.json().get("models", [])
-                # Check if our model is in the list
-                return any(tag.get("name") == self.model_name for tag in tags)
-            return False
-        except requests.exceptions.RequestException:
+            # Then check if the model is loaded and responsive
+            try:
+                llm = self._get_ollama_client()
+                # Try a simple prompt to check availability
+                result = llm.invoke("hello")
+                return result is not None and len(result) > 0
+            except Exception as e:
+                self.logger.warning(f"Model check failed: {str(e)}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Availability check failed: {str(e)}")
             return False

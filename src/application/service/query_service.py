@@ -84,18 +84,26 @@ class QueryService:
         # Step 4: Get conversation history if requested
         conversation_history = None
         if conversation_id:
-            # Get recent messages
-            messages = self.conversation_service.get_conversation_history(
-                conversation_id=conversation_id,
-                max_messages=5  # Limit to recent messages to avoid context overload
-            )
-            
-            if messages:
-                # Convert to format expected by LLM service
-                conversation_history = [
-                    {"role": msg.role, "content": msg.content}
-                    for msg in messages
-                ]
+            try:
+                # Get recent messages
+                message_objects = self.conversation_service.get_conversation_history(
+                    conversation_id=conversation_id,
+                    max_messages=5  # Limit to recent messages to avoid context overload
+                )
+                
+                if message_objects and isinstance(message_objects, list) and len(message_objects) > 0:
+                    # Convert to format expected by LLM service
+                    conversation_history = []
+                    for msg in message_objects:
+                        if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                            conversation_history.append({
+                                "role": msg.role,
+                                "content": msg.content
+                            })
+            except Exception as e:
+                print(f"Error processing conversation history: {str(e)}")
+                conversation_history = None
+
         
         # Step 5: Generate answer using LLM
         answer = self.llm_service.generate_response(
