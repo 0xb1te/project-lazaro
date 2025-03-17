@@ -27,7 +27,7 @@ class OllamaService(LLMService):
         
         Args:
             model_name: Name of the model to use (e.g., "llama2", "codellama")
-            base_url: Base URL of the Ollama API (e.g., "http://localhost:11434")
+            base_url: Base URL of the Ollama API (e.g., "http://172.17.0.1:11434")
             temperature: Temperature for generation (0.0-1.0)
             max_tokens: Maximum number of tokens to generate
             timeout: Request timeout in seconds
@@ -48,11 +48,11 @@ class OllamaService(LLMService):
         """
         try:
             # Try a simple health check
-            response = requests.get(f"{self.base_url}/api/health", timeout=5)
+            response = requests.get(f"{self.base_url}/", timeout=5)
             if response.status_code == 200:
                 self.logger.info(f"Ollama server is available at {self.base_url}")
             else:
-                self.logger.warning(f"Ollama server returned status code {response.status_code}")
+                self.logger.warning(f"Ollama server returned status code {response.status_code} at {self.base_url}")
         except requests.exceptions.RequestException as e:
             self.logger.warning(f"Could not connect to Ollama server at {self.base_url}: {str(e)}")
     
@@ -60,13 +60,17 @@ class OllamaService(LLMService):
         """
         Create and return a new OllamaLLM client.
         """
-        return OllamaLLM(
+        self.logger.info(f"Opened new Ollama client at {self.base_url}, model name: {self.model_name} and timeout settings at: {self.timeout}")
+        
+        ollamaLLM = OllamaLLM(
             model=self.model_name,
             base_url=self.base_url,
             num_ctx=self.max_tokens,
             temperature=self.temperature,
             request_timeout=self.timeout
         )
+        
+        return ollamaLLM
     
     def _get_fallback_response(self, question: str) -> str:
         """
@@ -122,87 +126,74 @@ class OllamaService(LLMService):
             
             # Create prompt template
             prompt = f"""
-            You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
-            if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
+                You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
+                if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
 
-            1. **Code Formatting**:
-            - Every block of code should be placed between `<code></code>` tags.
-            - Use proper indentation and syntax highlighting for readability.
+                1. **Code Formatting**:
+                - Every block of code should be placed between `<code></code>` tags.
+                - Use proper indentation and syntax highlighting for readability.
 
-            2. **Code Quality**:
-            - Follow SOLID principles.
-            - Ensure the code is clean, modular, and easy to maintain.
+                2. **Code Quality**:
+                - Follow SOLID principles.
+                - Ensure the code is clean, modular, and easy to maintain.
 
-            3. **Code Review**:
-            - Review your code to ensure it is functional and free of errors.
-            - Do not share non-working or incomplete code.
+                3. **Code Review**:
+                - Review your code to ensure it is functional and free of errors.
+                - Do not share non-working or incomplete code.
 
-            4. **Explanation**:
-            - Provide a clear and concise explanation of the code, always specify the name of the file you are talking about.
-            - Explain how the code works and why it solves the problem.
-            - Use bullet points or numbered lists for step-by-step explanations if necessary.
+                4. **Explanation**:
+                - Provide a clear and concise explanation of the code, always specify the name of the file you are talking about.
+                - Explain how the code works and why it solves the problem.
+                - Use bullet points or numbered lists for step-by-step explanations if necessary.
 
-            5. **Context Awareness**:
-            - Use both the document context provided and our conversation history to generate the answer.
-            - Maintain continuity with previous responses when appropriate.
-            
-            6. **Code Compression Awareness**:
-            - Note that the code you're analyzing has been compressed to reduce token usage.
-            - Some variable names and identifiers might have been shortened.
-            - Focus on explaining the structure and logic rather than the specific variable names when appropriate.
-
-            {formatted_history}
-
-            Document Context:
-            {context}
-
-            Current Question:
-            {question}
-
-            Answer:
-            """
-            
-            # Add robust retry logic
-            max_retries = 3
-            retry_delay = 2  # seconds
-            last_error = None
-            
-            for attempt in range(max_retries):
-                try:
-                    # Create a fresh client for each attempt
-                    llm = self._get_ollama_client()
-                    
-                    # Get the answer with timeout handling
-                    answer = llm.invoke(prompt)
-                    
-                    # If we got here, the request succeeded
-                    if answer and isinstance(answer, str) and len(answer.strip()) > 0:
-                        return answer
-                    else:
-                        self.logger.warning(f"Empty response from Ollama (attempt {attempt+1}/{max_retries})")
-                        # Try again if we got an empty response
-                        if attempt < max_retries - 1:
-                            time.sleep(retry_delay)
-                            retry_delay *= 2  # Exponential backoff
-                        else:
-                            return self._get_fallback_response(question)
+                5. **Context Awareness**:
+                - Use both the document context provided and our conversation history to generate the answer.
+                - Maintain continuity with previous responses when appropriate.
                 
-                except Exception as e:
-                    last_error = e
-                    self.logger.warning(f"Error on attempt {attempt+1}/{max_retries}: {str(e)}")
-                    
-                    # Check if this is the last attempt
-                    if attempt < max_retries - 1:
-                        self.logger.info(f"Retrying in {retry_delay} seconds...")
-                        time.sleep(retry_delay)
-                        retry_delay *= 2  # Exponential backoff
-                    else:
-                        # This was the last attempt, log the final error
-                        self.logger.error(f"Final error after {max_retries} attempts: {str(e)}")
+                6. **Code Compression Awareness**:
+                - Note that the code you're analyzing has been compressed to reduce token usage.
+                - Some variable names and identifiers might have been shortened.
+                - Focus on explaining the structure and logic rather than the specific variable names when appropriate.
+
+                7. **Professional Tone**:
+                - Use a professional and friendly tone.
+                - Avoid jargon unless it is necessary and clearly explained.
+
+                8. **Answer if you the user calls you LAZARO**:
+                - Answer without taking into account the provided codebase.
+                - If you are called LAZARO, you are free to use information outside the context.
+
+                9. **Preserve Existing Functionality**:
+                - When suggesting code changes, always identify and preserve existing functionality.
+                - Clearly mark which parts of the code remain unchanged and which parts are modified.
+                - If suggesting new code, explain how it integrates with the existing system without breaking current features.
+                - When modifying code, include comments explaining the rationale for each change.
+
+                10. **Implementation Guidelines**:
+                - Present code modifications as targeted changes rather than complete rewrites when possible.
+                - For any suggested changes, explain potential impacts on other parts of the codebase.
+                - Provide fallback mechanisms or error handling for any new features.
+
+                {formatted_history}
+
+                Document Context:
+                {context}
+
+                Current Question:
+                {question}
+
+                Answer:
+                """
+
+            self.logger.info(f"Provided data for Question: {str(question)} | context: \n {context} and conversation history: \n {conversation_history}")
             
-            # If we get here, all retries failed
-            self.logger.error(f"All {max_retries} attempts failed. Last error: {str(last_error)}")
-            return self._get_fallback_response(question)
+            # Create a fresh client for each attempt
+            llm = self._get_ollama_client()
+            
+            # Get the answer with timeout handling
+            answer = llm.invoke(prompt)
+            
+            return answer
             
         except Exception as e:
             self.logger.error(f"Error generating response: {str(e)}")
@@ -376,9 +367,9 @@ class OllamaService(LLMService):
         try:
             # First, check if Ollama server is accessible
             try:
-                response = requests.get(f"{self.base_url}/api/health", timeout=5)
+                response = requests.get(f"{self.base_url}/", timeout=5)
                 if response.status_code != 200:
-                    self.logger.warning(f"Ollama server health check failed: {response.status_code}")
+                    self.logger.warning(f"Ollama server health check failed: {response.status_code} at {self.base_url}")
                     return False
             except requests.exceptions.RequestException as e:
                 self.logger.warning(f"Could not connect to Ollama server: {str(e)}")

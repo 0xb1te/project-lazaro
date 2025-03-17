@@ -21,7 +21,7 @@ class Config:
         
         # LLM configuration
         self.LLM_MODEL = os.getenv("LLM_MODEL", "hf.co/bartowski/DeepSeek-Coder-V2-Lite-Instruct-GGUF:Q8_0_L")
-        self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://172.17.0.1:11434")
         
         # Storage configuration
         self.STORAGE_DIR = os.getenv("STORAGE_DIR", "./storage")
