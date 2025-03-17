@@ -187,7 +187,7 @@ def get_answer_from_context(question, context, conversation_history=None):
     conversation_context = ""
     if conversation_history and len(conversation_history) > 0:
         # Format previous messages (limit to last 5 to avoid context overflow)
-        prev_messages = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+        prev_messages = conversation_history[-200:] if len(conversation_history) > 200 else conversation_history
         conversation_context = "Previous conversation:\n"
         for msg in prev_messages:
             role = "User" if msg["role"] == "user" else "Assistant"

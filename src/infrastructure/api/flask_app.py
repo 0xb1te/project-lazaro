@@ -122,6 +122,7 @@ class FlaskApiAdapter:
                 data = request.json
                 question = data.get("question")
                 conversation_id = data.get("conversation_id")
+                max_results = data.get("max_results", 200)
                 
                 if not question:
                     return jsonify({"error": "No question provided"}), 400
@@ -129,7 +130,8 @@ class FlaskApiAdapter:
                 # Process query
                 answer, similar_docs = self.query_service.process_query(
                     question=question,
-                    conversation_id=conversation_id
+                    conversation_id=conversation_id,
+                    max_results=max_results
                 )
                 
                 return jsonify({
@@ -274,7 +276,8 @@ class FlaskApiAdapter:
                 # Use a simple question to retrieve documents
                 answer, documents = self.query_service.process_query(
                     "Show me all documents", 
-                    conversation_id=None
+                    conversation_id=None,
+                    max_results=200
                 )
                 
                 return jsonify({"documents": documents})

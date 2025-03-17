@@ -42,7 +42,7 @@ def query(input):
         hits = db.search(
             collection_name="code_vectors",
             query_vector=question_embedding,
-            limit=5
+            limit=200
         )
         
         # Extract relevant contexts from search results

@@ -1,5 +1,5 @@
 # src/application/service/query_service.py
-import time
+import time, os
 from typing import List, Dict, Any, Optional, Tuple
 
 from src.domain.port.repository.vector_repository import VectorRepository
@@ -43,7 +43,7 @@ class QueryService:
         self, 
         question: str, 
         conversation_id: Optional[str] = None,
-        max_results: int = 5
+        max_results: int = 200
     ) -> Tuple[str, List[DocumentChunkDTO]]:
         """
         Process a user query using RAG (Retrieval-Augmented Generation).
@@ -88,7 +88,7 @@ class QueryService:
                 # Get recent messages
                 message_objects = self.conversation_service.get_conversation_history(
                     conversation_id=conversation_id,
-                    max_messages=5  # Limit to recent messages to avoid context overload
+                    max_messages=200  # Limit to recent messages to avoid context overload
                 )
                 
                 if message_objects and isinstance(message_objects, list) and len(message_objects) > 0:
@@ -175,19 +175,23 @@ class QueryService:
         """
         # Join document texts with separators
         context_parts = []
+    
+        # Group chunks by source file
+        chunks_by_file = {}
+        for doc in documents:
+            file_path = doc.metadata.get("file_path", "Unknown")
+            if file_path not in chunks_by_file:
+                chunks_by_file[file_path] = []
+            chunks_by_file[file_path].append(doc)
         
-        for i, doc in enumerate(documents):
-            # Add document metadata if available
-            metadata = doc.metadata
-            source_info = ""
+        # Format chunks by file
+        for file_path, chunks in chunks_by_file.items():
+            file_name = os.path.basename(file_path)
+            context_parts.append(f"--- File: {file_name} ---")
             
-            if metadata:
-                file_name = metadata.get("file_name", "Unknown")
-                file_path = metadata.get("file_path", "Unknown")
-                source_info = f"Source: {file_path}"
-            
-            # Add formatted document chunk with source info
-            context_parts.append(f"--- Document {i+1} {source_info} ---\n{doc.text}\n")
+            for i, chunk in enumerate(chunks):
+                context_parts.append(f"[Chunk {i+1}]\n{chunk.text}\n")
+                
+            context_parts.append("")  # Add blank line between files
         
-        # Join all parts into a single context string
         return "\n".join(context_parts)

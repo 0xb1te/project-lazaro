@@ -9,7 +9,7 @@ class QueryRequestDTO:
     
     question: str
     conversation_id: Optional[str] = None
-    max_results: int = 5
+    max_results: int = 200
     include_metadata: bool = True
     
     def to_dict(self) -> Dict[str, Any]:

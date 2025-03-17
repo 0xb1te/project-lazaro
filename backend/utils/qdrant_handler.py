@@ -63,7 +63,7 @@ def insert_documents(texts, embeddings):
             points=batch
         )
 
-def search_similar_documents(query_vector, limit=5):
+def search_similar_documents(query_vector, limit=200):
     """Search for similar documents using the query vector."""
     client = get_qdrant_client()
     
@@ -163,7 +163,7 @@ def get_conversations():
     # Scroll through all conversations
     scroll_result = client.scroll(
         collection_name=CONVERSATIONS_COLLECTION,
-        limit=100  # Ajusta según necesites
+        limit=200  # Ajusta según necesites
     )
     
     conversations = []

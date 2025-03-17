@@ -65,9 +65,9 @@ class OllamaService(LLMService):
         ollamaLLM = OllamaLLM(
             model=self.model_name,
             base_url=self.base_url,
-            num_ctx=self.max_tokens,
-            temperature=self.temperature,
-            request_timeout=self.timeout
+            num_ctx=4096,
+            temperature=0.8,
+            request_timeout=120
         )
         
         return ollamaLLM
@@ -114,8 +114,8 @@ class OllamaService(LLMService):
             formatted_history = ""
             if conversation_history and len(conversation_history) > 0:
                 try:
-                    # Limit to last 5 messages to avoid context overflow
-                    recent_history = conversation_history[-5:] if len(conversation_history) > 5 else conversation_history
+                    # Limit to last 200 messages to avoid context overflow
+                    recent_history = conversation_history[-200:] if len(conversation_history) > 200 else conversation_history
                     formatted_history = "Previous conversation:\n"
                     for msg in recent_history:
                         role = "User" if msg["role"] == "user" else "Assistant"

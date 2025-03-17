@@ -133,7 +133,7 @@ class SentenceTransformerService(EmbeddingService):
             text = str(text)
         
         # Limit text length to avoid excessive token usage
-        MAX_LENGTH = 10000  # Maximum characters
+        MAX_LENGTH = 1000000  # Maximum characters
         if len(text) > MAX_LENGTH:
             self.logger.warning(f"Truncating text from {len(text)} to {MAX_LENGTH} characters")
             text = text[:MAX_LENGTH]

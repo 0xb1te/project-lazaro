@@ -42,7 +42,7 @@ class VectorRepository(ABC):
     def search_similar(self, 
                       collection_name: str, 
                       query_vector: List[float], 
-                      limit: int = 5,
+                      limit: int = 200,
                       filter_criteria: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Search for document chunks similar to a query vector.
@@ -123,7 +123,7 @@ class VectorRepository(ABC):
     def search_by_metadata(self, 
                           collection_name: str, 
                           metadata_filter: Dict[str, Any],
-                          limit: int = 100) -> List[Dict[str, Any]]:
+                          limit: int = 200) -> List[Dict[str, Any]]:
         """
         Search for documents by metadata.
         
