@@ -1,27 +1,28 @@
 # src/domain/model/document_chunk.py
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 import uuid
 
 @dataclass
 class DocumentChunk:
     """
-    Domain entity representing a chunk of a document with its content, metadata, and embedding.
-    Document chunks are the units stored in the vector database for retrieval.
+    Domain entity representing a chunk of text from a document.
+    Each document can be split into multiple chunks for efficient retrieval.
     """
     
     content: str
     metadata: Dict[str, Any]
-    id: str = None
-    embedding: Optional[List[float]] = None
+    document_id: str
+    chunk_id: str = None
+    embedding: Optional[list] = None
     
     def __post_init__(self):
         """Initialize default values if not provided."""
         # Generate ID if not provided
-        if self.id is None:
-            self.id = str(uuid.uuid4())
+        if self.chunk_id is None:
+            self.chunk_id = str(uuid.uuid4())
         
-        # Initialize empty metadata if None
+        # Ensure metadata is a dictionary
         if self.metadata is None:
             self.metadata = {}
     
@@ -55,17 +56,13 @@ class DocumentChunk:
         Returns:
             Dictionary representation of the document chunk
         """
-        result = {
-            "id": self.id,
+        return {
+            "chunk_id": self.chunk_id,
+            "document_id": self.document_id,
             "content": self.content,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "embedding": self.embedding
         }
-        
-        # Only include embedding if it exists
-        if self.embedding is not None:
-            result["embedding"] = self.embedding
-            
-        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'DocumentChunk':
@@ -79,7 +76,8 @@ class DocumentChunk:
             DocumentChunk instance
         """
         return cls(
-            id=data.get("id"),
+            chunk_id=data.get("chunk_id"),
+            document_id=data.get("document_id"),
             content=data.get("content", ""),
             metadata=data.get("metadata", {}),
             embedding=data.get("embedding")

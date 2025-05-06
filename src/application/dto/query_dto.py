@@ -5,21 +5,85 @@ from datetime import datetime
 
 @dataclass
 class QueryRequestDTO:
-    """Data Transfer Object for a query request."""
-    
-    question: str
+    """
+    Data Transfer Object for a query request from the client.
+    """
+    query: str
     conversation_id: Optional[str] = None
-    max_results: int = 200
-    include_metadata: bool = True
+    max_results: int = 5
+    temperature: float = 0.7
+    include_context: bool = True
+
+@dataclass
+class RetrievedChunkDTO:
+    """
+    Data Transfer Object for document chunks retrieved from the vector store.
+    """
+    chunk_id: str
+    document_id: str
+    content: str
+    metadata: Dict[str, Any]
+    score: float
+
+@dataclass
+class QueryResponseDTO:
+    """
+    Data Transfer Object for a query response to the client.
+    """
+    response: str
+    query: str
+    conversation_id: Optional[str] = None
+    retrieved_chunks: List[RetrievedChunkDTO] = field(default_factory=list)
+    timestamp: datetime = field(default_factory=datetime.utcnow)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            "question": self.question,
+            "response": self.response,
+            "query": self.query,
             "conversation_id": self.conversation_id,
-            "max_results": self.max_results,
-            "include_metadata": self.include_metadata
+            "retrieved_chunks": [
+                {
+                    "chunk_id": chunk.chunk_id,
+                    "document_id": chunk.document_id,
+                    "content": chunk.content,
+                    "metadata": chunk.metadata,
+                    "score": chunk.score
+                } for chunk in self.retrieved_chunks
+            ],
+            "timestamp": self.timestamp.isoformat()
         }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'QueryResponseDTO':
+        """Create from dictionary representation."""
+        retrieved_chunks = []
+        for chunk_data in data.get("retrieved_chunks", []):
+            chunk = RetrievedChunkDTO(
+                chunk_id=chunk_data.get("chunk_id", ""),
+                document_id=chunk_data.get("document_id", ""),
+                content=chunk_data.get("content", ""),
+                metadata=chunk_data.get("metadata", {}),
+                score=chunk_data.get("score", 0.0)
+            )
+            retrieved_chunks.append(chunk)
+        
+        timestamp = data.get("timestamp")
+        if timestamp and isinstance(timestamp, str):
+            try:
+                timestamp = datetime.fromisoformat(timestamp)
+            except ValueError:
+                timestamp = datetime.utcnow()
+        else:
+            timestamp = datetime.utcnow()
+        
+        return cls(
+            response=data.get("response", ""),
+            query=data.get("query", ""),
+            conversation_id=data.get("conversation_id"),
+            retrieved_chunks=retrieved_chunks,
+            timestamp=timestamp
+        )
 
 @dataclass
 class DocumentChunkDTO:
@@ -48,43 +112,6 @@ class DocumentChunkDTO:
             "similarity": self.similarity,
             "metadata": self.metadata
         }
-
-@dataclass
-class QueryResponseDTO:
-    """Data Transfer Object for a query response."""
-    
-    answer: str
-    similar_documents: List[DocumentChunkDTO] = field(default_factory=list)
-    conversation_id: Optional[str] = None
-    processing_time_ms: Optional[float] = None
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QueryResponseDTO':
-        """Create a QueryResponseDTO from a dictionary."""
-        similar_docs = [
-            DocumentChunkDTO.from_dict(doc) 
-            for doc in data.get("similar_documents", [])
-        ]
-        
-        return cls(
-            answer=data.get("answer", ""),
-            similar_documents=similar_docs,
-            conversation_id=data.get("conversation_id"),
-            processing_time_ms=data.get("processing_time_ms")
-        )
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        result = {
-            "answer": self.answer,
-            "similar_documents": [doc.to_dict() for doc in self.similar_documents],
-            "conversation_id": self.conversation_id
-        }
-        
-        if self.processing_time_ms is not None:
-            result["processing_time_ms"] = self.processing_time_ms
-        
-        return result
 
 @dataclass
 class DocumentUploadRequestDTO:

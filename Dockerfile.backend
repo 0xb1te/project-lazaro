@@ -4,29 +4,26 @@ FROM python:3.10-slim
 # Set working directory
 WORKDIR /app
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    poppler-utils \
-    antiword \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project files
-COPY ./src/setup.py .
-COPY ./src/run.py .
-COPY src/ src/
-COPY .env .
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install the package in editable mode
-RUN pip install -e .
+# Copy application code
+COPY src/ /app/src/
+COPY .env /app/.env
 
-# Create necessary directories with proper permissions
-RUN mkdir -p /app/uploads && chmod 777 /app/uploads
-RUN mkdir -p /app/storage/conversations && chmod -R 777 /app/storage
+# Create necessary directories
+RUN mkdir -p /app/storage/conversations /app/storage/documents /app/uploads
 
-# Expose port
-EXPOSE 5000
-
-# Command to run the application
-CMD ["python", "run.py"]
+# Set the entrypoint
+ENTRYPOINT ["python", "-m", "src.run"]

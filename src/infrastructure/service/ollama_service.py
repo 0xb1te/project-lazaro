@@ -4,6 +4,7 @@ import time
 import requests
 from typing import List, Dict, Any, Optional
 import json
+from urllib.parse import urljoin
 
 from langchain_ollama import OllamaLLM
 from src.domain.port.service.llm_service import LLMService
@@ -20,7 +21,8 @@ class OllamaService(LLMService):
         base_url: str, 
         temperature: float = 0.7, 
         max_tokens: int = 2000,
-        timeout: int = 120
+        timeout: int = 120,
+        num_ctx: int = 4096
     ):
         """
         Initialize the Ollama service.
@@ -31,12 +33,14 @@ class OllamaService(LLMService):
             temperature: Temperature for generation (0.0-1.0)
             max_tokens: Maximum number of tokens to generate
             timeout: Request timeout in seconds
+            num_ctx: Context window size
         """
         self.model_name = model_name
         self.base_url = base_url.rstrip('/')
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.timeout = timeout
+        self.num_ctx = num_ctx
         self.logger = logging.getLogger(__name__)
         
         # Check if Ollama is available during initialization
@@ -65,7 +69,7 @@ class OllamaService(LLMService):
         ollamaLLM = OllamaLLM(
             model=self.model_name,
             base_url=self.base_url,
-            num_ctx=4096,
+            num_ctx=self.num_ctx,
             temperature=0.8,
             request_timeout=120
         )
@@ -388,3 +392,58 @@ class OllamaService(LLMService):
         except Exception as e:
             self.logger.error(f"Availability check failed: {str(e)}")
             return False
+
+    def generate_chat_response(self, 
+                             messages: List[Dict[str, str]], 
+                             temperature: float = 0.7,
+                             max_tokens: Optional[int] = None,
+                             context: Optional[str] = None) -> str:
+        """
+        Generate a response in a chat-based conversation.
+        
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            temperature: Controls randomness in generation (0.0-1.0)
+            max_tokens: Maximum number of tokens to generate
+            context: Additional context to consider when generating a response
+            
+        Returns:
+            The generated response text
+        """
+        # Prepare the request payload
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": temperature,
+            "num_ctx": self.num_ctx,
+        }
+        
+        # Add max_tokens if specified
+        if max_tokens is not None:
+            payload["num_predict"] = max_tokens
+        
+        # Add system context if provided
+        if context:
+            # Add system message at the beginning if not already present
+            if not messages or messages[0].get("role") != "system":
+                messages.insert(0, {"role": "system", "content": context})
+        
+        # Make the API request
+        response = requests.post(
+            urljoin(self.base_url, "api/chat"),
+            headers={"Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=120  # 2 minute timeout
+        )
+        
+        # Handle errors
+        if response.status_code != 200:
+            error_msg = f"Ollama API error: {response.status_code} - {response.text}"
+            raise RuntimeError(error_msg)
+        
+        # Extract the response text
+        try:
+            response_data = response.json()
+            return response_data.get("message", {}).get("content", "")
+        except (json.JSONDecodeError, KeyError) as e:
+            raise RuntimeError(f"Failed to parse Ollama chat response: {str(e)}")

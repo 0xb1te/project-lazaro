@@ -2,40 +2,61 @@
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
-class LLMService(ABC):
+class LlmService(ABC):
     """
-    Port (interface) defining operations for large language model services.
-    This interface allows the domain and application layers to interact with
-    LLM services without knowing the specific implementation.
+    Port (interface) for large language model services.
+    This interface defines operations for generating text responses from prompts.
     
-    Implementations of this interface might use Ollama, OpenAI, or other LLM providers.
+    Implementations might use different LLM providers or models.
     """
     
     @abstractmethod
     def generate_response(self, 
-                         question: str, 
-                         context: str, 
-                         conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
+                         prompt: str, 
+                         temperature: float = 0.7, 
+                         max_tokens: Optional[int] = None,
+                         context: Optional[str] = None) -> str:
         """
-        Generate a response to a question based on context and conversation history.
+        Generate a text response to a given prompt.
         
         Args:
-            question: The user's question
-            context: Relevant context for answering the question
-            conversation_history: Optional list of previous messages
+            prompt: The prompt to generate a response for
+            temperature: Controls randomness in generation (0.0-1.0)
+            max_tokens: Maximum number of tokens to generate
+            context: Additional context to consider when generating a response
             
         Returns:
-            Generated response text
+            The generated text response
+        """
+        pass
+    
+    @abstractmethod
+    def generate_chat_response(self, 
+                             messages: List[Dict[str, str]], 
+                             temperature: float = 0.7,
+                             max_tokens: Optional[int] = None,
+                             context: Optional[str] = None) -> str:
+        """
+        Generate a response in a chat-based conversation.
+        
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            temperature: Controls randomness in generation (0.0-1.0)
+            max_tokens: Maximum number of tokens to generate
+            context: Additional context to consider when generating a response
+            
+        Returns:
+            The generated response text
         """
         pass
     
     @abstractmethod
     def get_model_name(self) -> str:
         """
-        Get the name or identifier of the language model.
+        Get the name of the language model being used.
         
         Returns:
-            Model name or identifier
+            The model name
         """
         pass
     

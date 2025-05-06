@@ -1,40 +1,38 @@
 # src/domain/port/service/embedding_service.py
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Union
 
 class EmbeddingService(ABC):
     """
-    Port (interface) defining operations for generating embeddings.
-    This interface allows the domain and application layers to interact with
-    embedding generation services without knowing the specific implementation.
+    Port (interface) for embedding generation services.
+    This interface defines operations for converting text to vector embeddings.
     
-    Implementations of this interface might use SentenceTransformers, OpenAI embeddings,
-    or other embedding models.
+    Implementations might use different embedding models or services.
     """
     
     @abstractmethod
-    def get_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> List[float]:
         """
-        Generate an embedding vector for a single text.
+        Generate an embedding vector for a single text input.
         
         Args:
             text: The text to generate an embedding for
             
         Returns:
-            Embedding vector as a list of floats
+            A list of floating-point values representing the embedding vector
         """
         pass
     
     @abstractmethod
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embedding vectors for multiple texts.
+        Generate embedding vectors for a batch of text inputs.
         
         Args:
-            texts: List of texts to generate embeddings for
+            texts: The list of texts to generate embeddings for
             
         Returns:
-            List of embedding vectors
+            A list of embedding vectors
         """
         pass
     
@@ -44,7 +42,7 @@ class EmbeddingService(ABC):
         Get the dimension of the embedding vectors.
         
         Returns:
-            Embedding dimension
+            The dimension (number of elements) of the embedding vectors
         """
         pass
     
