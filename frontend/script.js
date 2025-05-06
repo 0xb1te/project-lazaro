@@ -1017,18 +1017,66 @@ async function handleSendMessage() {
       }
     );
 
+    // Process the response
+    let errorMessage = null;
+    let data = null;
+
+    try {
+      data = await response.json();
+    } catch (parseError) {
+      console.error("Error parsing response:", parseError);
+      errorMessage = "Error parsing server response";
+    }
+
     // Remove typing indicator
     removeTypingIndicator(loadingId);
 
-    // Process the response
     if (!response.ok) {
-      // If there's an error, still show it in the UI
-      const errorData = await response.json();
-      const errorMessage = errorData.error || "Error processing message";
+      // If there's an error, check if it's a model download issue
+      if (data && data.error) {
+        const error = data.error.toLowerCase();
 
+        // Check if the error is related to Ollama model download
+        if (error.includes("downloading") || error.includes("pulling model")) {
+          // Show a model download indicator instead of an error
+          const modelId = addModelDownloadIndicator();
+
+          showToast(
+            "Downloading AI model. This may take several minutes for the first time.",
+            "info",
+            10000
+          );
+
+          // Poll the server every 3 seconds to check if the model download is complete
+          const pollInterval = setInterval(async () => {
+            try {
+              const statusResponse = await fetch(`${API_BASE_URL}/health`);
+              const statusData = await statusResponse.json();
+
+              if (statusData.status === "healthy") {
+                clearInterval(pollInterval);
+                removeModelDownloadIndicator(modelId);
+
+                // Try again automatically
+                await handleSendMessage();
+              }
+            } catch (pollError) {
+              console.error("Error polling server status:", pollError);
+            }
+          }, 3000);
+
+          return;
+        }
+
+        errorMessage = data.error;
+      } else {
+        errorMessage = `Server error (${response.status}): ${response.statusText}`;
+      }
+
+      // Display error in chat
       const assistantErrorMessage = {
         role: "assistant",
-        content: `Error: ${errorMessage}`,
+        content: `Error: ${errorMessage}. Please try again or check the server logs.`,
         timestamp: new Date().toISOString(),
       };
       renderMessage(assistantErrorMessage);
@@ -1036,23 +1084,39 @@ async function handleSendMessage() {
       throw new Error(errorMessage);
     }
 
-    // Parse the response
-    const data = await response.json();
+    // Handle success case
+    if (data) {
+      // Render the assistant's response if it exists
+      if (data.assistant_message && data.assistant_message.content) {
+        const assistantMessage = {
+          role: "assistant",
+          content: data.assistant_message.content,
+          timestamp:
+            data.assistant_message.timestamp || new Date().toISOString(),
+        };
+        renderMessage(assistantMessage);
+      } else if (data.error) {
+        // Handle case when there's an error in generating AI response
+        const errorContent = data.error.includes("model")
+          ? `${data.error}. The AI model might be downloading or not available.`
+          : data.error;
 
-    // Render the assistant's response if it exists
-    if (data && data.assistant_message && data.assistant_message.content) {
-      const assistantMessage = {
-        role: "assistant",
-        content: data.assistant_message.content,
-        timestamp: data.assistant_message.timestamp || new Date().toISOString(),
-      };
-      renderMessage(assistantMessage);
+        const assistantErrorMessage = {
+          role: "assistant",
+          content: `Error: ${errorContent}`,
+          timestamp: new Date().toISOString(),
+        };
+        renderMessage(assistantErrorMessage);
+
+        // Show error in toast with extended duration
+        showToast(`Error: ${errorContent}`, "error", 8000);
+      }
     }
   } catch (error) {
     console.error("Error sending message:", error);
 
     // Show error in toast
-    showToast(`Error: ${error.message}`, "error");
+    showToast(`Error: ${error.message}`, "error", 5000);
   } finally {
     isProcessing = false;
     toggleLoadingState(false);
@@ -1083,6 +1147,46 @@ function addTypingIndicator() {
   chatHistory.scrollTop = chatHistory.scrollHeight;
 
   return id;
+}
+
+function addModelDownloadIndicator() {
+  const id = `model-download-${Date.now()}`;
+  const downloadHtml = `
+    <div id="${id}" class="message bot">
+      <div class="message-avatar">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z" />
+          <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z" />
+        </svg>
+      </div>
+      <div class="message-content">
+        <div class="message-bubble">
+          <div class="model-download-container">
+            <div class="download-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 animate-bounce" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </div>
+            <p>Downloading AI model...</p>
+            <div class="progress-container">
+              <div class="progress-bar animate-pulse"></div>
+            </div>
+            <p class="text-xs mt-2">This may take several minutes. Please wait.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  chatHistory.insertAdjacentHTML("beforeend", downloadHtml);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+
+  return id;
+}
+
+function removeModelDownloadIndicator(id) {
+  const element = document.getElementById(id);
+  if (element) element.remove();
 }
 
 function removeTypingIndicator(id) {
@@ -1185,7 +1289,7 @@ function copyToClipboard(blockId) {
     });
 }
 
-function showToast(message, type = "info") {
+function showToast(message, type = "info", duration = 3000) {
   const toast = document.getElementById("toast");
 
   // Clear any previous classes
@@ -1205,16 +1309,15 @@ function showToast(message, type = "info") {
 
   setTimeout(() => {
     toast.classList.remove("show");
-  }, 3000);
+  }, duration);
 }
 
 function updateModelInfo() {
-  fetch(`${API_BASE_URL}/.env`)
-    .then((response) => response.text())
-    .then((text) => {
-      const modelMatch = text.match(/LLM_MODEL=(.+)/);
-      if (modelMatch && modelMatch[1]) {
-        modelName.textContent = modelMatch[1];
+  fetch(`${API_BASE_URL}/health`)
+    .then((response) => response.json())
+    .then((data) => {
+      if (data && data.environment && data.environment.LLM_MODEL) {
+        modelName.textContent = data.environment.LLM_MODEL;
       } else {
         modelName.textContent = DEFAULT_MODEL;
       }

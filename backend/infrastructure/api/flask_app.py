@@ -44,6 +44,7 @@ class FlaskApiAdapter:
         """Set up the API routes."""
         # Health check
         self.app.route("/")(self.health_check)
+        self.app.route("/health")(self.health_check)
         
         # Conversation routes
         self.app.route("/conversations", methods=["GET"])(self.get_all_conversations)
@@ -86,6 +87,33 @@ class FlaskApiAdapter:
     
     def health_check(self) -> Response:
         """Health check endpoint."""
+        ollama_status = "unknown"
+        model_status = "unknown"
+        
+        try:
+            # Verificar el estado del servicio de Ollama
+            llm_service = self.container.get_llm_service()
+            ollama_available = llm_service.check_model_availability()
+            
+            if ollama_available:
+                ollama_status = "available"
+                model_status = "loaded"
+            else:
+                # Intentar obtener información más detallada
+                try:
+                    # Verificar si el servidor Ollama está en ejecución
+                    import requests
+                    response = requests.get(self.config.OLLAMA_BASE_URL, timeout=2)
+                    if response.status_code == 200:
+                        ollama_status = "available"
+                        model_status = "not_loaded"
+                    else:
+                        ollama_status = f"error: status {response.status_code}"
+                except Exception as server_error:
+                    ollama_status = f"unavailable: {str(server_error)}"
+        except Exception as e:
+            ollama_status = f"error: {str(e)}"
+        
         env_config = {
             "status": "healthy",
             "environment": {
@@ -100,6 +128,13 @@ class FlaskApiAdapter:
                 "DEBUG_MODE": self.config.DEBUG_MODE,
                 "WORKING_DIRECTORY": os.getcwd(),
                 "VERSION": "2.0.0"
+            },
+            "services": {
+                "ollama": {
+                    "status": ollama_status,
+                    "model": self.config.LLM_MODEL,
+                    "model_status": model_status
+                }
             }
         }
         return jsonify(env_config)
