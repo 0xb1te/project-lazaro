@@ -15,18 +15,25 @@ class QdrantVectorRepository(VectorRepository):
     Stores and retrieves document chunks with vector embeddings using Qdrant.
     """
     
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, collection_name: str = "documents", embedding_dimension: int = 384):
         """
         Initialize the repository with Qdrant connection details.
         
         Args:
             host: Qdrant host address
             port: Qdrant port number
+            collection_name: Name of the collection to use
+            embedding_dimension: Dimension of the embedding vectors
         """
         self.host = host
         self.port = port
+        self.collection_name = collection_name
+        self.embedding_dimension = embedding_dimension
         self.client = QdrantClient(host=host, port=port)
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize the collection
+        self.initialize_collection(collection_name, embedding_dimension)
     
     def initialize_collection(self, collection_name: str, dimension: int = 384) -> None:
         """
@@ -53,17 +60,20 @@ class QdrantVectorRepository(VectorRepository):
         else:
             self.logger.info(f"Collection {collection_name} already exists")
     
-    def add_documents(self, collection_name: str, document_chunks: List[DocumentChunk]) -> List[str]:
+    def add_documents(self, document_chunks: List[DocumentChunk], collection_name: str = None) -> List[str]:
         """
         Add document chunks with embeddings to Qdrant.
         
         Args:
-            collection_name: Name of the collection
             document_chunks: List of document chunks with embeddings
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
             List of IDs of the added documents
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         # Prepare points for insertion
         points = []
         ids = []
@@ -101,22 +111,25 @@ class QdrantVectorRepository(VectorRepository):
         return ids
     
     def search_similar(self, 
-                      collection_name: str, 
                       query_vector: List[float], 
                       limit: int = 200,
-                      filter_criteria: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                      filter_criteria: Optional[Dict[str, Any]] = None,
+                      collection_name: str = None) -> List[Dict[str, Any]]:
         """
         Search for document chunks similar to a query vector.
         
         Args:
-            collection_name: Name of the collection
             query_vector: Vector to search for
             limit: Maximum number of results
             filter_criteria: Optional filter criteria
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
             List of document chunks with similarity scores
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         # Prepare search filter if provided
         search_filter = None
         if filter_criteria:
@@ -167,51 +180,60 @@ class QdrantVectorRepository(VectorRepository):
         self.logger.info(f"Found {len(results)} results in collection {collection_name}")
         return results
     
-    def clear_collection(self, collection_name: str) -> None:
+    def clear_collection(self, collection_name: str = None) -> None:
         """
         Clear all documents from a collection.
         
         Args:
-            collection_name: Name of the collection
+            collection_name: Name of the collection (optional, uses default if not specified)
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         try:
             # Delete the collection
             self.client.delete_collection(collection_name=collection_name)
             self.logger.info(f"Deleted collection {collection_name}")
             
             # Recreate it
-            self.initialize_collection(collection_name)
+            self.initialize_collection(collection_name, self.embedding_dimension)
             self.logger.info(f"Recreated empty collection {collection_name}")
         except Exception as e:
             # The collection might not exist, which is fine
             self.logger.warning(f"Error clearing collection {collection_name}: {str(e)}")
             
             # Ensure the collection exists
-            self.initialize_collection(collection_name)
+            self.initialize_collection(collection_name, self.embedding_dimension)
     
-    def delete_collection(self, collection_name: str) -> None:
+    def delete_collection(self, collection_name: str = None) -> None:
         """
         Delete a collection.
         
         Args:
-            collection_name: Name of the collection
+            collection_name: Name of the collection (optional, uses default if not specified)
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         try:
             self.client.delete_collection(collection_name=collection_name)
             self.logger.info(f"Deleted collection {collection_name}")
         except Exception as e:
             self.logger.warning(f"Error deleting collection {collection_name}: {str(e)}")
     
-    def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
+    def get_collection_info(self, collection_name: str = None) -> Dict[str, Any]:
         """
         Get information about a collection.
         
         Args:
-            collection_name: Name of the collection
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
             Dictionary with collection information
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         try:
             # Get collection info
             collection_info = self.client.get_collection(collection_name=collection_name)
@@ -231,17 +253,20 @@ class QdrantVectorRepository(VectorRepository):
             self.logger.warning(f"Error getting info for collection {collection_name}: {str(e)}")
             return {"name": collection_name, "error": str(e)}
     
-    def get_document_by_id(self, collection_name: str, document_id: str) -> Optional[Dict[str, Any]]:
+    def get_document_by_id(self, document_id: str, collection_name: str = None) -> Optional[Dict[str, Any]]:
         """
         Get a document by ID.
         
         Args:
-            collection_name: Name of the collection
             document_id: ID of the document
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
             Document data if found, None otherwise
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         try:
             # Retrieve points by ID
             points = self.client.retrieve(
@@ -249,30 +274,37 @@ class QdrantVectorRepository(VectorRepository):
                 ids=[document_id]
             )
             
-            if points and len(points) > 0:
-                point = points[0]
-                return {
-                    "id": point.id,
-                    "text": point.payload["text"],
-                    "metadata": point.payload.get("metadata", {})
-                }
+            if not points:
+                return None
             
-            return None
+            point = points[0]
+            
+            # Format result
+            result = {
+                "id": point.id,
+                "text": point.payload["text"],
+                "metadata": point.payload.get("metadata", {})
+            }
+            
+            return result
         except Exception as e:
             self.logger.warning(f"Error retrieving document {document_id}: {str(e)}")
             return None
     
-    def delete_documents(self, collection_name: str, document_ids: List[str]) -> int:
+    def delete_documents(self, document_ids: List[str], collection_name: str = None) -> int:
         """
-        Delete documents by ID.
+        Delete documents from a collection.
         
         Args:
-            collection_name: Name of the collection
             document_ids: List of document IDs to delete
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
             Number of documents deleted
         """
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
+        
         try:
             # Delete points by ID
             self.client.delete(
@@ -289,40 +321,42 @@ class QdrantVectorRepository(VectorRepository):
             return 0
     
     def search_by_metadata(self, 
-                          collection_name: str, 
-                          metadata_filter: Dict[str, Any],
-                          limit: int = 200) -> List[Dict[str, Any]]:
+                        metadata_filter: Dict[str, Any],
+                        limit: int = 200,
+                        collection_name: str = None) -> List[Dict[str, Any]]:
         """
-        Search for documents by metadata.
+        Search for documents by metadata criteria.
         
         Args:
-            collection_name: Name of the collection
-            metadata_filter: Filter criteria for metadata
+            metadata_filter: Dictionary with metadata key-value pairs to match
             limit: Maximum number of results
+            collection_name: Name of the collection (optional, uses default if not specified)
             
         Returns:
-            List of documents matching the metadata filter
+            List of document chunks matching the criteria
         """
-        # Create filter conditions
-        filter_conditions = []
+        # Use default collection if not specified
+        collection_name = collection_name or self.collection_name
         
-        for key, value in metadata_filter.items():
-            # For metadata fields, we need to use a special syntax
-            filter_conditions.append(
-                FieldCondition(
-                    key=f"metadata.{key}",
-                    match=MatchValue(value=value)
-                )
-            )
-        
-        # Create the final filter
-        search_filter = Filter(
-            must=filter_conditions
-        )
-        
-        # Scroll through results
         try:
-            scroll_result = self.client.scroll(
+            # Prepare filter
+            filter_conditions = []
+            
+            for key, value in metadata_filter.items():
+                filter_conditions.append(
+                    FieldCondition(
+                        key=f"metadata.{key}",
+                        match=MatchValue(value=value)
+                    )
+                )
+            
+            # Create the final filter
+            search_filter = Filter(
+                must=filter_conditions
+            )
+            
+            # Search for matching documents
+            search_result = self.client.scroll(
                 collection_name=collection_name,
                 filter=search_filter,
                 limit=limit
@@ -330,8 +364,7 @@ class QdrantVectorRepository(VectorRepository):
             
             # Format results
             results = []
-            
-            for point in scroll_result[0]:
+            for point in search_result[0]:
                 results.append({
                     "id": point.id,
                     "text": point.payload["text"],

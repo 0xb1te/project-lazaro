@@ -20,8 +20,7 @@ class QueryService:
         vector_repository: VectorRepository,
         embedding_service: EmbeddingService,
         llm_service: LLMService,
-        conversation_service: ConversationService,
-        collection_name: str
+        conversation_service: ConversationService
     ):
         """
         Initialize the service with dependencies.
@@ -31,107 +30,99 @@ class QueryService:
             embedding_service: Service for generating embeddings
             llm_service: Service for generating text responses
             conversation_service: Service for conversation management
-            collection_name: Name of the vector collection
         """
         self.vector_repository = vector_repository
         self.embedding_service = embedding_service
         self.llm_service = llm_service
         self.conversation_service = conversation_service
-        self.collection_name = collection_name
     
-    def process_query(
-        self, 
-        question: str, 
-        conversation_id: Optional[str] = None,
-        max_results: int = 200
-    ) -> Tuple[str, List[DocumentChunkDTO]]:
+    def process_query(self, query_request: QueryRequestDTO) -> QueryResponseDTO:
         """
-        Process a user query using RAG (Retrieval-Augmented Generation).
+        Process a query and return a structured response.
         
         Args:
-            question: The user's question
-            conversation_id: Optional ID of the associated conversation
-            max_results: Maximum number of results to retrieve
+            query_request: The query request DTO
             
         Returns:
-            Tuple of (answer, similar_documents)
+            Query response DTO with answer and related documents
         """
         start_time = time.time()
         
-        # Create a query request DTO
-        query_request = QueryRequestDTO(
-            question=question,
-            conversation_id=conversation_id,
-            max_results=max_results
-        )
+        # Step 1: Generate embedding for the query
+        query_embedding = self.embedding_service.get_embedding(query_request.query)
         
-        # Step 1: Generate embedding for the question
-        question_embedding = self.embedding_service.get_embedding(query_request.question)
-        
-        # Step 2: Search for similar documents
+        # Step 2: Search for similar documents - note we don't pass collection_name anymore
         similar_docs_data = self.vector_repository.search_similar(
-            self.collection_name,
-            question_embedding,
+            query_vector=query_embedding,
             limit=query_request.max_results
         )
         
         # Convert to DTOs
-        similar_docs = [DocumentChunkDTO.from_dict(doc) for doc in similar_docs_data]
+        similar_docs = []
+        for doc_data in similar_docs_data:
+            doc_dto = DocumentChunkDTO(
+                id=doc_data["id"],
+                text=doc_data["text"],
+                similarity=doc_data["similarity"],
+                metadata=doc_data["metadata"]
+            )
+            similar_docs.append(doc_dto)
         
         # Step 3: Extract context from documents
         context = self._create_context_from_documents(similar_docs)
         
         # Step 4: Get conversation history if requested
         conversation_history = None
-        if conversation_id:
+        if query_request.conversation_id:
             try:
                 # Get recent messages
                 message_objects = self.conversation_service.get_conversation_history(
-                    conversation_id=conversation_id,
-                    max_messages=200  # Limit to recent messages to avoid context overload
+                    conversation_id=query_request.conversation_id,
+                    max_messages=10  # Limit to recent messages to avoid context overload
                 )
                 
-                if message_objects and isinstance(message_objects, list) and len(message_objects) > 0:
+                if message_objects and len(message_objects) > 0:
                     # Convert to format expected by LLM service
                     conversation_history = []
                     for msg in message_objects:
-                        if hasattr(msg, 'role') and hasattr(msg, 'content'):
-                            conversation_history.append({
-                                "role": msg.role,
-                                "content": msg.content
-                            })
+                        conversation_history.append({
+                            "role": msg.role,
+                            "content": msg.content
+                        })
             except Exception as e:
                 print(f"Error processing conversation history: {str(e)}")
                 conversation_history = None
-
         
         # Step 5: Generate answer using LLM
         answer = self.llm_service.generate_response(
-            question=question,
+            query=query_request.query,
             context=context,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
+            temperature=query_request.temperature
         )
         
         # Step 6: Store in conversation if conversation_id provided
-        if conversation_id:
+        if query_request.conversation_id:
             # Add user message
-            self.conversation_service.add_user_message(conversation_id, question)
+            self.conversation_service.add_user_message(query_request.conversation_id, query_request.query)
             
             # Add assistant message
-            self.conversation_service.add_assistant_message(conversation_id, answer)
+            self.conversation_service.add_assistant_message(query_request.conversation_id, answer)
         
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
         
         # Build response
         response = QueryResponseDTO(
+            query=query_request.query,
             answer=answer,
             similar_documents=similar_docs,
-            conversation_id=conversation_id,
-            processing_time_ms=processing_time_ms
+            conversation_id=query_request.conversation_id,
+            processing_time_ms=processing_time_ms,
+            temperature=query_request.temperature
         )
         
-        return answer, similar_docs
+        return response
     
     def ask_question(self, query_request: QueryRequestDTO) -> QueryResponseDTO:
         """
@@ -146,22 +137,14 @@ class QueryService:
         start_time = time.time()
         
         # Process the query
-        answer, similar_docs = self.process_query(
-            question=query_request.question,
-            conversation_id=query_request.conversation_id,
-            max_results=query_request.max_results
-        )
+        response = self.process_query(query_request)
         
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
         
         # Build and return response
-        return QueryResponseDTO(
-            answer=answer,
-            similar_documents=similar_docs,
-            conversation_id=query_request.conversation_id,
-            processing_time_ms=processing_time_ms
-        )
+        response.processing_time_ms = processing_time_ms
+        return response
     
     def _create_context_from_documents(self, documents: List[DocumentChunkDTO]) -> str:
         """

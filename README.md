@@ -83,6 +83,7 @@ The system follows a strict hexagonal architecture with the following layers:
    ```
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
+   .\venv\Scripts\Activate.ps1 # On Windows
    ```
 
 3. Install dependencies:
@@ -106,7 +107,8 @@ The system follows a strict hexagonal architecture with the following layers:
 #### Development Mode
 
 ```
-python -m src.run
+python -m backend
+python serve_frontend.py
 ```
 
 The application will start on http://localhost:5000.

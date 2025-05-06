@@ -1,5 +1,5 @@
 // Constants
-const API_BASE_URL = ''; // Empty for relative URLs
+const API_BASE_URL = "http://localhost:5000"; // Point to the correct backend URL
 const DEFAULT_MODEL = "llama2";
 
 // DOM Elements
@@ -16,7 +16,9 @@ const fileInput = document.getElementById("file-input");
 const dropOverlay = document.getElementById("drop-overlay");
 const toast = document.getElementById("toast");
 const modelName = document.getElementById("model-name");
-const currentConversationTitle = document.getElementById("current-conversation-title");
+const currentConversationTitle = document.getElementById(
+  "current-conversation-title"
+);
 const editTitleBtn = document.getElementById("edit-title-btn");
 const editTitleModal = document.getElementById("edit-title-modal");
 const editTitleInput = document.getElementById("edit-title-input");
@@ -31,6 +33,7 @@ const messageTemplate = document.getElementById("message-template");
 // State
 let activeConversationId = null;
 let isProcessing = false;
+let isInitialLoad = true;
 
 // Initialize
 document.addEventListener("DOMContentLoaded", () => {
@@ -57,33 +60,37 @@ function setupEventListeners() {
 
   // ==== SIMPLIFIED DRAG AND DROP ====
   // Document-level drag events
-  document.addEventListener('dragover', (e) => {
+  document.addEventListener("dragover", (e) => {
     e.preventDefault();
     if (!dragActive) {
       dragActive = true;
       if (dropOverlay) {
-        dropOverlay.style.display = 'flex';
+        dropOverlay.style.display = "flex";
       }
     }
   });
 
-  document.addEventListener('dragleave', (e) => {
+  document.addEventListener("dragleave", (e) => {
     // Only consider leaving if we're leaving the window
-    if (e.clientX <= 0 || e.clientX >= window.innerWidth ||
-      e.clientY <= 0 || e.clientY >= window.innerHeight) {
+    if (
+      e.clientX <= 0 ||
+      e.clientX >= window.innerWidth ||
+      e.clientY <= 0 ||
+      e.clientY >= window.innerHeight
+    ) {
       dragActive = false;
       if (dropOverlay) {
-        dropOverlay.style.display = 'none';
+        dropOverlay.style.display = "none";
       }
     }
   });
 
-  document.addEventListener('drop', (e) => {
+  document.addEventListener("drop", (e) => {
     e.preventDefault();
     dragActive = false;
 
     if (dropOverlay) {
-      dropOverlay.style.display = 'none';
+      dropOverlay.style.display = "none";
     }
 
     console.log("Drop event detected with files:", e.dataTransfer);
@@ -99,14 +106,14 @@ function setupEventListeners() {
 
   // Drop overlay events
   if (dropOverlay) {
-    dropOverlay.addEventListener('dragover', (e) => {
+    dropOverlay.addEventListener("dragover", (e) => {
       e.preventDefault();
     });
 
-    dropOverlay.addEventListener('drop', (e) => {
+    dropOverlay.addEventListener("drop", (e) => {
       e.preventDefault();
       dragActive = false;
-      dropOverlay.style.display = 'none';
+      dropOverlay.style.display = "none";
 
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         uploadFile(e.dataTransfer.files[0]);
@@ -116,26 +123,26 @@ function setupEventListeners() {
 
   // Drop area in sidebar
   if (dropArea) {
-    dropArea.addEventListener('dragover', (e) => {
+    dropArea.addEventListener("dragover", (e) => {
       e.preventDefault();
-      dropArea.classList.add('border-blue-500');
-      dropArea.classList.add('bg-blue-50');
+      dropArea.classList.add("border-blue-500");
+      dropArea.classList.add("bg-blue-50");
     });
 
-    dropArea.addEventListener('dragleave', (e) => {
-      dropArea.classList.remove('border-blue-500');
-      dropArea.classList.remove('bg-blue-50');
+    dropArea.addEventListener("dragleave", (e) => {
+      dropArea.classList.remove("border-blue-500");
+      dropArea.classList.remove("bg-blue-50");
     });
 
-    dropArea.addEventListener('drop', (e) => {
+    dropArea.addEventListener("drop", (e) => {
       e.preventDefault();
       dragActive = false;
 
-      dropArea.classList.remove('border-blue-500');
-      dropArea.classList.remove('bg-blue-50');
+      dropArea.classList.remove("border-blue-500");
+      dropArea.classList.remove("bg-blue-50");
 
       if (dropOverlay) {
-        dropOverlay.style.display = 'none';
+        dropOverlay.style.display = "none";
       }
 
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -180,7 +187,9 @@ function setupEventListeners() {
   }
 
   if (newChatButton) {
-    newChatButton.addEventListener("click", createNewConversation);
+    newChatButton.addEventListener("click", () =>
+      createNewConversation("New Conversation", false)
+    );
   }
 
   // Edit title functionality
@@ -237,7 +246,11 @@ function handleDragEnter(e) {
   e.preventDefault();
 
   // Check if actually dragging a file
-  if (e.dataTransfer.types && (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.indexOf('Files') !== -1)) {
+  if (
+    e.dataTransfer.types &&
+    (e.dataTransfer.types.includes("Files") ||
+      e.dataTransfer.types.indexOf("Files") !== -1)
+  ) {
     isDraggingFile = true;
     dragCounter++;
 
@@ -399,35 +412,48 @@ async function uploadFile(file) {
 // Conversation Management
 async function loadConversations() {
   try {
+    console.log(
+      "Fetching conversations from:",
+      `${API_BASE_URL}/conversations`
+    );
     const response = await fetch(`${API_BASE_URL}/conversations`);
 
     if (!response.ok) {
+      console.error("Error response:", response.status, response.statusText);
       throw new Error("Failed to load conversations");
     }
 
     const data = await response.json();
+    console.log("Loaded conversations data:", data);
 
     // If there are conversations available
     if (data.conversations && data.conversations.length > 0) {
+      console.log(`Found ${data.conversations.length} conversations`);
       // Set the first conversation as active if none is active
       if (!activeConversationId) {
         activeConversationId = data.conversations[0].id;
+        console.log("Set active conversation to:", activeConversationId);
       }
 
       renderConversationsList(data.conversations);
       await loadConversation(activeConversationId);
     } else {
+      console.log("No conversations found, creating a new one");
       // Create a new conversation if none exist
-      await createNewConversation();
+      await createNewConversation("New Conversation", true);
     }
+
+    isInitialLoad = false;
   } catch (error) {
     console.error("Error loading conversations:", error);
     showToast(`Error loading conversations: ${error.message}`, "error");
 
     // Create a new conversation if we couldn't load any
     if (!activeConversationId) {
-      await createNewConversation();
+      await createNewConversation("New Conversation", true);
     }
+
+    isInitialLoad = false;
   }
 }
 
@@ -435,7 +461,9 @@ async function loadConversation(conversationId) {
   if (!conversationId) return;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/conversations/${conversationId}`);
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${conversationId}`
+    );
 
     if (!response.ok) {
       throw new Error("Failed to load conversation");
@@ -451,10 +479,13 @@ async function loadConversation(conversationId) {
   }
 }
 
-async function createNewConversation(title = "New Conversation") {
+async function createNewConversation(
+  title = "New Conversation",
+  skipReload = false
+) {
   try {
     // Ensure title is a string
-    if (typeof title !== 'string') {
+    if (typeof title !== "string") {
       console.error("Invalid title type:", typeof title);
       title = "New Conversation";
     }
@@ -466,7 +497,7 @@ async function createNewConversation(title = "New Conversation") {
       },
       body: JSON.stringify({
         title: title,
-        initial_message: "Hello! How can I help you with your code?"
+        initial_message: "Hello! How can I help you with your code?",
       }),
     });
 
@@ -477,11 +508,13 @@ async function createNewConversation(title = "New Conversation") {
     const conversation = await response.json();
     activeConversationId = conversation.id;
 
-    // Reload conversations to update the list
-    await loadConversations();
-
-    // Render the new conversation
-    renderConversation(conversation);
+    // Reload conversations to update the list - but not if we're already in the load process
+    if (!skipReload) {
+      await loadConversations();
+    } else {
+      // Render the new conversation directly
+      renderConversation(conversation);
+    }
 
     // Clear input
     chatInput.value = "";
@@ -517,7 +550,7 @@ async function deleteConversation(id) {
 
     // If no conversation is active, create a new one
     if (!activeConversationId) {
-      await createNewConversation();
+      await createNewConversation("New Conversation", true);
     } else {
       await loadConversation(activeConversationId);
     }
@@ -537,7 +570,7 @@ async function updateConversationTitle(id, newTitle) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        title: newTitle
+        title: newTitle,
       }),
     });
 
@@ -568,15 +601,23 @@ async function setActiveConversation(id) {
 // UI Rendering
 function renderConversationsList(conversations) {
   conversationsList.innerHTML = "";
+  console.log("Rendering conversations list:", conversations);
 
-  conversations.forEach(conversation => {
+  conversations.forEach((conversation) => {
     const conversationNode = conversationTemplate.content.cloneNode(true);
-    const conversationItem = conversationNode.querySelector(".conversation-item");
+    const conversationItem =
+      conversationNode.querySelector(".conversation-item");
     const titleElement = conversationNode.querySelector(".conversation-title");
     const deleteButton = conversationNode.querySelector(".delete-conversation");
 
+    // Asegurarse de que id esté definido
+    if (!conversation.id) {
+      console.error("Conversation missing ID:", conversation);
+      return;
+    }
+
     conversationItem.dataset.id = conversation.id;
-    titleElement.textContent = conversation.title;
+    titleElement.textContent = conversation.title || "Untitled";
 
     // Mark active conversation
     if (conversation.id === activeConversationId) {
@@ -592,7 +633,7 @@ function renderConversationsList(conversations) {
       // Create input element for editing
       const input = document.createElement("input");
       input.type = "text";
-      input.value = conversation.title;
+      input.value = conversation.title || "Untitled";
       input.className = "w-full p-1 border rounded";
 
       // Replace title with input
@@ -643,7 +684,7 @@ function renderConversation(conversation) {
 
   // Render each message
   if (conversation.messages && conversation.messages.length > 0) {
-    conversation.messages.forEach(message => {
+    conversation.messages.forEach((message) => {
       renderMessage(message);
     });
   }
@@ -678,7 +719,7 @@ function renderConversationDocuments(documents) {
   const docsContainer = document.createElement("div");
   docsContainer.className = "flex flex-wrap";
 
-  documents.forEach(doc => {
+  documents.forEach((doc) => {
     const template = document.getElementById("document-template");
     const docNode = template.content.cloneNode(true);
     const docItem = docNode.querySelector(".document-item");
@@ -713,7 +754,7 @@ function renderMessage(message) {
   const bubbleElement = messageNode.querySelector(".message-bubble");
 
   // Make sure we have content
-  const content = message.content || '';
+  const content = message.content || "";
 
   // Set role-specific styles and content
   if (message.role === "user") {
@@ -751,7 +792,7 @@ function renderMessage(message) {
 
   // Apply syntax highlighting to code blocks (only needed for assistant and system messages)
   if (message.role !== "user") {
-    Array.from(bubbleElement.querySelectorAll('pre code')).forEach(block => {
+    Array.from(bubbleElement.querySelectorAll("pre code")).forEach((block) => {
       hljs.highlightElement(block);
     });
   }
@@ -763,7 +804,11 @@ function renderMessage(message) {
   chatHistory.scrollTop = chatHistory.scrollHeight;
 
   // For debugging: log the message being rendered
-  console.log("Rendered message:", message.role, content.substring(0, 50) + (content.length > 50 ? '...' : ''));
+  console.log(
+    "Rendered message:",
+    message.role,
+    content.substring(0, 50) + (content.length > 50 ? "..." : "")
+  );
 }
 
 function formatMessage(content) {
@@ -773,14 +818,17 @@ function formatMessage(content) {
 
   // First, protect code blocks from other replacements by tokenizing them
   const codeBlocks = [];
-  content = content.replace(/```(\w+)?\n([\s\S]+?)```/g, (match, language, code) => {
-    const token = `___CODE_BLOCK_${codeBlocks.length}___`;
-    codeBlocks.push({
-      language: language || 'text',
-      code: code.trim()
-    });
-    return token;
-  });
+  content = content.replace(
+    /```(\w+)?\n([\s\S]+?)```/g,
+    (match, language, code) => {
+      const token = `___CODE_BLOCK_${codeBlocks.length}___`;
+      codeBlocks.push({
+        language: language || "text",
+        code: code.trim(),
+      });
+      return token;
+    }
+  );
 
   // Process inline code with single backticks (protect from other replacements)
   const inlineCodeBlocks = [];
@@ -791,8 +839,10 @@ function formatMessage(content) {
   });
 
   // Process thought blocks
-  content = content.replace(/<think>([\s\S]*?)<\/think>/g, (match, thinking) => {
-    return `
+  content = content.replace(
+    /<think>([\s\S]*?)<\/think>/g,
+    (match, thinking) => {
+      return `
       <div class="thought-block">
         <div class="thought-header">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -803,12 +853,13 @@ function formatMessage(content) {
         <div class="thought-content">${thinking.trim()}</div>
       </div>
     `;
-  });
+    }
+  );
 
   // Process bullet lists (with proper indentation and spacing)
-  const bulletListLines = content.split('\n');
+  const bulletListLines = content.split("\n");
   let inBulletList = false;
-  let bulletListHTML = '';
+  let bulletListHTML = "";
   let processedLines = [];
 
   for (let i = 0; i < bulletListLines.length; i++) {
@@ -828,9 +879,9 @@ function formatMessage(content) {
     } else {
       // If we were in a list and now we're not, close the list
       if (inBulletList) {
-        bulletListHTML += '</ul>';
+        bulletListHTML += "</ul>";
         processedLines.push(bulletListHTML);
-        bulletListHTML = '';
+        bulletListHTML = "";
         inBulletList = false;
       }
 
@@ -841,11 +892,11 @@ function formatMessage(content) {
 
   // Close any open list at the end
   if (inBulletList) {
-    bulletListHTML += '</ul>';
+    bulletListHTML += "</ul>";
     processedLines.push(bulletListHTML);
   }
 
-  content = processedLines.join('\n');
+  content = processedLines.join("\n");
 
   // Process numbered lists
   content = content.replace(/^(\d+)\.\s+(.+)$/gm, (match, number, text) => {
@@ -861,8 +912,14 @@ function formatMessage(content) {
   // Process paragraphs (add proper spacing between paragraphs)
   content = content.replace(/(.+)\n\n(.+)/g, (match, para1, para2) => {
     // Don't process if the paragraph is already in an HTML tag
-    if (para1.includes('<div') || para1.includes('<ul') || para1.includes('<p') ||
-      para2.includes('<div') || para2.includes('<ul') || para2.includes('<p')) {
+    if (
+      para1.includes("<div") ||
+      para1.includes("<ul") ||
+      para1.includes("<p") ||
+      para2.includes("<div") ||
+      para2.includes("<ul") ||
+      para2.includes("<p")
+    ) {
       return match;
     }
     return `<p class="readable-paragraph">${para1}</p>\n\n<p class="readable-paragraph">${para2}</p>`;
@@ -874,26 +931,31 @@ function formatMessage(content) {
   });
 
   // Process bold text
-  content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  content = content.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 
   // Process italics
-  content = content.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  content = content.replace(/\*(.*?)\*/g, "<em>$1</em>");
 
   // Process horizontal rules
   content = content.replace(/^---+$/gm, '<hr class="readable-hr">');
 
   // Restore inline code blocks with proper formatting
   inlineCodeBlocks.forEach((code, i) => {
-    content = content.replace(`___INLINE_CODE_${i}___`, `<span class="filename">${escapeHtml(code)}</span>`);
+    content = content.replace(
+      `___INLINE_CODE_${i}___`,
+      `<span class="filename">${escapeHtml(code)}</span>`
+    );
   });
 
   // Whenever there is a hyphen, add a line jump
-  content = content.replace(/\s+-\s+/g, '<br>- ');
+  content = content.replace(/\s+-\s+/g, "<br>- ");
 
   // Restore code blocks with proper formatting
   codeBlocks.forEach((block, i) => {
     const uniqueId = `code-block-${Math.random().toString(36).substring(2, 9)}`;
-    content = content.replace(`___CODE_BLOCK_${i}___`, `
+    content = content.replace(
+      `___CODE_BLOCK_${i}___`,
+      `
       <div class="code-block" id="${uniqueId}">
         <div class="code-header">
           <div class="code-language">${block.language}</div>
@@ -904,9 +966,12 @@ function formatMessage(content) {
             <span>Copy</span>
           </button>
         </div>
-        <pre><code class="language-${block.language}">${escapeHtml(block.code)}</code></pre>
+        <pre><code class="language-${block.language}">${escapeHtml(
+        block.code
+      )}</code></pre>
       </div>
-    `);
+    `
+    );
   });
 
   return content;
@@ -930,7 +995,7 @@ async function handleSendMessage() {
     const userMessage = {
       role: "user",
       content: message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
     renderMessage(userMessage);
 
@@ -938,16 +1003,19 @@ async function handleSendMessage() {
     const loadingId = addTypingIndicator();
 
     // Send the message to the backend
-    const response = await fetch(`${API_BASE_URL}/conversations/${activeConversationId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        role: "user",
-        content: message
-      }),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${activeConversationId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          role: "user",
+          content: message,
+        }),
+      }
+    );
 
     // Remove typing indicator
     removeTypingIndicator(loadingId);
@@ -961,7 +1029,7 @@ async function handleSendMessage() {
       const assistantErrorMessage = {
         role: "assistant",
         content: `Error: ${errorMessage}`,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
       renderMessage(assistantErrorMessage);
 
@@ -976,7 +1044,7 @@ async function handleSendMessage() {
       const assistantMessage = {
         role: "assistant",
         content: data.assistant_message.content,
-        timestamp: data.assistant_message.timestamp || new Date().toISOString()
+        timestamp: data.assistant_message.timestamp || new Date().toISOString(),
       };
       renderMessage(assistantMessage);
     }
@@ -1011,7 +1079,7 @@ function addTypingIndicator() {
     </div>
   `;
 
-  chatHistory.insertAdjacentHTML('beforeend', typingHtml);
+  chatHistory.insertAdjacentHTML("beforeend", typingHtml);
   chatHistory.scrollTop = chatHistory.scrollHeight;
 
   return id;
@@ -1039,10 +1107,14 @@ async function handleDebugClick() {
     const data = await response.json();
 
     // Create a new conversation for debug data
-    const conversation = await createNewConversation("Collection Debug");
+    const conversation = await createNewConversation("Collection Debug", false);
 
     // Add the data as a message
-    const formattedDebug = `\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``;
+    const formattedDebug = `\`\`\`json\n${JSON.stringify(
+      data,
+      null,
+      2
+    )}\n\`\`\``;
 
     await fetch(`${API_BASE_URL}/conversations/${conversation.id}/messages`, {
       method: "POST",
@@ -1051,7 +1123,7 @@ async function handleDebugClick() {
       },
       body: JSON.stringify({
         role: "system",
-        content: "Here is the collection data:\n" + formattedDebug
+        content: "Here is the collection data:\n" + formattedDebug,
       }),
     });
 
@@ -1086,7 +1158,8 @@ function copyToClipboard(blockId) {
   const codeBlock = document.getElementById(blockId);
   const codeContent = codeBlock.querySelector("code").textContent;
 
-  navigator.clipboard.writeText(codeContent)
+  navigator.clipboard
+    .writeText(codeContent)
     .then(() => {
       // Update button temporarily
       const button = codeBlock.querySelector(".copy-button");
@@ -1137,8 +1210,8 @@ function showToast(message, type = "info") {
 
 function updateModelInfo() {
   fetch(`${API_BASE_URL}/.env`)
-    .then(response => response.text())
-    .then(text => {
+    .then((response) => response.text())
+    .then((text) => {
       const modelMatch = text.match(/LLM_MODEL=(.+)/);
       if (modelMatch && modelMatch[1]) {
         modelName.textContent = modelMatch[1];

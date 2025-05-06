@@ -16,11 +16,13 @@ transformers
 
 # Document processing
 langchain
+langchain-community
 langchain-text-splitters
 tiktoken
 pypdf
 beautifulsoup4
 lxml
+mammoth
 
 # Development
 pytest

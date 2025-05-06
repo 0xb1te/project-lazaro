@@ -13,6 +13,7 @@ import mammoth
 
 from backend.domain.port.repository.vector_repository import VectorRepository
 from backend.domain.port.service.embedding_service import EmbeddingService
+from backend.domain.port.service.document_processor_service import DocumentProcessorService
 from backend.domain.model.document_chunk import DocumentChunk
 from backend.application.service.conversation_service import ConversationService
 from backend.application.dto.query_dto import DocumentUploadRequestDTO, DocumentUploadResponseDTO
@@ -31,8 +32,7 @@ class DocumentService:
         vector_repository: VectorRepository,
         embedding_service: EmbeddingService,
         conversation_service: ConversationService,
-        collection_name: str,
-        upload_folder: str
+        document_processor: DocumentProcessorService
     ):
         """
         Initialize the service with dependencies.
@@ -41,88 +41,78 @@ class DocumentService:
             vector_repository: Repository for vector storage and search
             embedding_service: Service for generating embeddings
             conversation_service: Service for conversation management
-            collection_name: Name of the vector collection
-            upload_folder: Path to the upload folder
+            document_processor: Service for processing documents
         """
         self.vector_repository = vector_repository
         self.embedding_service = embedding_service
         self.conversation_service = conversation_service
-        self.collection_name = collection_name
-        self.upload_folder = upload_folder
-
+        self.document_processor = document_processor
+        
         # Create upload directory if it doesn't exist
-        os.makedirs(upload_folder, exist_ok=True)
+        os.makedirs(self.document_processor.upload_folder, exist_ok=True)
 
-    def process_document(
-        self,
-        file_path: str,
-        filename: str,
-        conversation_id: Optional[str] = None,
-        clear_collection: bool = True
-    ) -> DocumentUploadResponseDTO:
+    def upload_document(self, upload_request: DocumentUploadRequestDTO) -> DocumentUploadResponseDTO:
         """
-        Process a document for indexing and RAG.
-
+        Process a document upload request.
+        
         Args:
-            file_path: Path to the file
-            filename: Original filename
-            conversation_id: ID of the conversation to associate with (optional)
-            clear_collection: Whether to clear the collection before indexing
-
+            upload_request: DTO with upload information
+            
         Returns:
             Response DTO with processing results
         """
         start_time = time.time()
-
+        
+        # Save the file to the upload folder
+        file_path = os.path.join(self.document_processor.upload_folder, upload_request.filename)
+        upload_request.file.save(file_path)
+        
         # Determine file type
-        is_zip = filename.endswith(".zip")
+        is_zip = upload_request.filename.endswith(".zip")
         file_type = "zip" if is_zip else "file"
-
-        # Process file based on type
+        
+        # Process the document
         if is_zip:
             chunks = self._process_zip_file(file_path)
         else:
             chunks = self._process_single_file(file_path)
-
-        # Clear collection if requested
-        if clear_collection:
-            self.vector_repository.clear_collection(self.collection_name)
-
+        
         # Generate document chunks with embeddings
         document_chunks = []
         for chunk in chunks:
             # Generate embedding
             embedding = self.embedding_service.get_embedding(chunk.page_content)
-
+            
             # Create document chunk with embedding
             document_chunk = DocumentChunk(
                 content=chunk.page_content,
                 metadata=chunk.metadata,
                 embedding=embedding
             )
-
+            
             document_chunks.append(document_chunk)
-
-        # Add to vector repository
-        self.vector_repository.add_documents(self.collection_name, document_chunks)
-
+        
+        # Add to vector repository - note we don't pass collection_name anymore
+        self.vector_repository.add_documents(document_chunks)
+        
         # Create or get conversation
-        if not conversation_id:
+        if not upload_request.conversation_id:
             conversation_dto = self.conversation_service.create_conversation(
-                title=f"Project: {filename}",
-                initial_message=f"I've indexed your project '{filename}' with code compression enabled. What would you like to know about it?"
+                title=f"Project: {upload_request.filename}",
+                initial_message=f"I've indexed your file '{upload_request.filename}'. What would you like to know about it?"
             )
             conversation_id = conversation_dto.id
-
+        else:
+            conversation_id = upload_request.conversation_id
+        
         # Create document ID
         document_id = str(uuid.uuid4())
-
+        
         # Add document to conversation
         document_info = {
             "id": document_id,
-            "filename": filename,
+            "filename": upload_request.filename,
             "type": file_type,
-            "compression_enabled": True,
             "chunk_count": len(chunks),
             "added_at": datetime.utcnow().isoformat(),
             "metadata": {
@@ -131,27 +121,26 @@ class DocumentService:
                 "embedding_model": self._get_embedding_model_name()
             }
         }
-
+        
         document_dto = self.conversation_service.add_document_to_conversation(
             conversation_id,
             document_info
         )
-
+        
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
-
+        
         # Prepare success message
         if is_zip:
-            message = "Project files indexed with code compression. You can now ask questions about your code with reduced token usage."
+            message = f"Project '{upload_request.filename}' with {len(chunks)} chunks has been indexed successfully."
         else:
-            message = "File indexed with code compression. You can now ask questions about it with reduced token usage."
-
+            message = f"File '{upload_request.filename}' with {len(chunks)} chunks has been indexed successfully."
+        
         # Create and return response DTO
         return DocumentUploadResponseDTO(
             message=message,
             conversation_id=conversation_id,
             document_id=document_id,
-            compression_enabled=True,
             chunks_processed=len(chunks),
             file_type=file_type,
             processing_time_ms=processing_time_ms

@@ -28,12 +28,15 @@ from backend.infrastructure.repository.qdrant_vector_repository import QdrantVec
 from backend.infrastructure.service.sentence_transformer_service import SentenceTransformerService
 from backend.infrastructure.service.ollama_service import OllamaService
 
-def setup_logging(config: Config) -> None:
+def setup_logging(config: Config) -> logging.Logger:
     """
     Set up application logging based on configuration.
     
     Args:
         config: Application configuration
+        
+    Returns:
+        Logger instance
     """
     log_level = getattr(logging, config.LOG_LEVEL, logging.INFO)
     logging.basicConfig(
@@ -49,8 +52,8 @@ def setup_logging(config: Config) -> None:
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     
-    # Create formatter
-    formatter = logging.getLogger()
+    # Create formatter (important change - use Formatter, not Logger)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_handler.setFormatter(formatter)
     
     # Add handlers

@@ -112,7 +112,11 @@ class FlaskApiAdapter:
         # Convert to dictionary representation
         result = [conv.to_dict() for conv in conversations]
         
-        return jsonify(result)
+        # Añadir logging para debuggear
+        print(f"Returning {len(result)} conversations")
+        
+        # Empaquetar en un objeto con propiedad 'conversations' para compat. con frontend
+        return jsonify({"conversations": result})
     
     def create_conversation(self) -> Response:
         """Create a new conversation."""
@@ -187,7 +191,45 @@ class FlaskApiAdapter:
             
             # Use the appropriate method based on role
             if role == "user":
+                # Add the user message
                 message = conversation_service.add_user_message(conversation_id, content)
+                
+                if not message:
+                    return jsonify({"error": "Conversation not found"}), 404
+                
+                # After adding user message, generate an AI response
+                try:
+                    # Create query request
+                    query_service = self.container.get_query_service()
+                    query_request = QueryRequestDTO(
+                        query=content,
+                        conversation_id=conversation_id,
+                        max_results=5,
+                        temperature=0.7,
+                        include_context=True
+                    )
+                    
+                    # Process the query to get AI response
+                    result = query_service.process_query(query_request)
+                    
+                    # Add the AI response as an assistant message
+                    assistant_message = conversation_service.add_assistant_message(
+                        conversation_id=conversation_id,
+                        content=result.answer
+                    )
+                    
+                    # Return both messages
+                    return jsonify({
+                        "user_message": message.to_dict(),
+                        "assistant_message": assistant_message.to_dict()
+                    })
+                except Exception as e:
+                    print(f"Error generating AI response: {str(e)}")
+                    # Return just the user message if AI generation fails
+                    return jsonify({
+                        "user_message": message.to_dict(),
+                        "error": f"Failed to generate AI response: {str(e)}"
+                    })
             elif role == "assistant":
                 message = conversation_service.add_assistant_message(conversation_id, content)
             elif role == "system":

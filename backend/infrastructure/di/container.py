@@ -94,8 +94,8 @@ class Container:
             self._instances["document_service"] = DocumentService(
                 vector_repository=self.get_vector_repository(),
                 embedding_service=self.get_embedding_service(),
-                document_processor=self.get_document_processor(),
-                conversation_service=self.get_conversation_service()
+                conversation_service=self.get_conversation_service(),
+                document_processor=self.get_document_processor()
             )
         return self._instances["document_service"]
     
