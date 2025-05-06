@@ -57,6 +57,7 @@ class FlaskApiAdapter:
         # Document routes
         self.app.route("/upload", methods=["POST"])(self.upload_document)
         self.app.route("/conversations/<conversation_id>/documents", methods=["GET"])(self.get_conversation_documents)
+        self.app.route("/conversations/<conversation_id>/documents/<document_id>", methods=["DELETE"])(self.delete_document)
         
         # Query routes
         self.app.route("/ask", methods=["POST"])(self.ask_question)
@@ -379,4 +380,42 @@ class FlaskApiAdapter:
             info = vector_repository.get_collection_info()
             return jsonify(info)
         except Exception as e:
+            return jsonify({"error": str(e)}), 500
+    
+    def delete_document(self, conversation_id: str, document_id: str) -> Response:
+        """Delete a document from a conversation."""
+        try:
+            conversation_service = self.container.get_conversation_service()
+            vector_repository = self.container.get_vector_repository()
+            
+            # First remove document from conversation
+            success = conversation_service.remove_document_from_conversation(conversation_id, document_id)
+            
+            if not success:
+                return jsonify({"error": "Document or conversation not found"}), 404
+            
+            # Then remove document chunks from vector store
+            # Search for all chunks with this document_id
+            chunks = vector_repository.search_by_metadata(
+                metadata_filter={"document_id": document_id},
+                collection_name=self.config.COLLECTION_NAME
+            )
+            
+            # If chunks were found, delete them
+            if chunks:
+                chunk_ids = [chunk["id"] for chunk in chunks]
+                deleted_count = vector_repository.delete_documents(
+                    document_ids=chunk_ids,
+                    collection_name=self.config.COLLECTION_NAME
+                )
+                print(f"Deleted {deleted_count} document chunks from vector store for document {document_id}")
+            
+            return jsonify({
+                "success": True, 
+                "message": f"Document {document_id} deleted from conversation {conversation_id} and vector store"
+            })
+        except Exception as e:
+            import traceback
+            print(f"Error deleting document: {str(e)}")
+            print(traceback.format_exc())
             return jsonify({"error": str(e)}), 500

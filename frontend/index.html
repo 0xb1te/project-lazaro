@@ -235,7 +235,7 @@
     <!-- Document template -->
     <template id="document-template">
       <div
-        class="document-item flex items-center p-1 text-xs text-slate-600 bg-slate-100 rounded mr-2 mb-1 inline-flex"
+        class="document-item flex items-center p-1 text-xs text-slate-600 bg-slate-100 rounded mr-2 mb-1 inline-flex group"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -252,6 +252,24 @@
           />
         </svg>
         <span class="document-name"></span>
+        <button
+          class="delete-document text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 ml-1 p-0.5 rounded-full hover:bg-red-50 transition-all"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-3 w-3"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
       </div>
     </template>
 

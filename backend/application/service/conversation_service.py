@@ -306,3 +306,44 @@ class ConversationService:
         
         # Ensure documents is a list before returning
         return conversation_dto.documents if hasattr(conversation_dto, 'documents') and isinstance(conversation_dto.documents, list) else []
+    
+    def remove_document_from_conversation(self, conversation_id: str, document_id: str) -> bool:
+        """
+        Remove a document from a conversation.
+        
+        Args:
+            conversation_id: The unique identifier for the conversation
+            document_id: The unique identifier for the document
+            
+        Returns:
+            True if the document was removed, False otherwise
+        """
+        # Fetch the conversation
+        conversation_data = self.conversation_repository.find_by_id(conversation_id)
+        if not conversation_data:
+            return False
+        
+        # Convert to domain entity
+        conversation = Conversation.from_dict(conversation_data)
+        
+        # Find the document
+        document_found = False
+        updated_documents = []
+        
+        for doc in conversation.documents:
+            if doc.id != document_id:
+                updated_documents.append(doc)
+            else:
+                document_found = True
+        
+        if not document_found:
+            return False
+        
+        # Update the documents list
+        conversation.documents = updated_documents
+        conversation.updated_at = datetime.utcnow()
+        
+        # Save the changes
+        self.conversation_repository.save(conversation.id, conversation.to_dict())
+        
+        return True

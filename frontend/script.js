@@ -696,6 +696,32 @@ function renderConversation(conversation) {
   chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
+async function deleteDocument(conversationId, documentId, event) {
+  // Prevent event propagation
+  event.stopPropagation();
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${conversationId}/documents/${documentId}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to delete document");
+    }
+
+    // Reload the active conversation to refresh the documents list
+    await loadConversation(conversationId);
+
+    showToast("Document deleted successfully", "success");
+  } catch (error) {
+    console.error("Error deleting document:", error);
+    showToast(`Error deleting document: ${error.message}`, "error");
+  }
+}
+
 function renderConversationDocuments(documents) {
   // Clear current documents
   conversationDocuments.innerHTML = "";
@@ -724,8 +750,12 @@ function renderConversationDocuments(documents) {
     const docNode = template.content.cloneNode(true);
     const docItem = docNode.querySelector(".document-item");
     const docName = docNode.querySelector(".document-name");
+    const deleteButton = docNode.querySelector(".delete-document");
 
     docName.textContent = doc.filename;
+
+    // Store document ID as a data attribute
+    docItem.dataset.id = doc.id;
 
     // Set different icon for zip files
     if (doc.filename.endsWith(".zip")) {
@@ -733,6 +763,13 @@ function renderConversationDocuments(documents) {
       docIcon.innerHTML = `
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z M12 2v2m0 10v2m0-6v2" />
       `;
+    }
+
+    // Add event listener for document deletion
+    if (deleteButton) {
+      deleteButton.addEventListener("click", (event) => {
+        deleteDocument(activeConversationId, doc.id, event);
+      });
     }
 
     docsContainer.appendChild(docNode);
