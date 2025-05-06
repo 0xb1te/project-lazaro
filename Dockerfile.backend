@@ -19,11 +19,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ /app/src/
+COPY backend/ /app/backend/
 COPY .env /app/.env
 
 # Create necessary directories
 RUN mkdir -p /app/storage/conversations /app/storage/documents /app/uploads
 
 # Set the entrypoint
-ENTRYPOINT ["python", "-m", "src.run"]
+ENTRYPOINT ["python", "-m", "backend.run"]
