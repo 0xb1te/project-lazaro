@@ -28,7 +28,7 @@ class SentenceTransformerService(EmbeddingService):
         self.logger.info(f"Initialized SentenceTransformer with model: {model_name}")
         self.logger.info(f"Model embedding dimension: {self.get_embedding_dimension()}")
     
-    def get_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str) -> List[float]:
         """
         Generate an embedding vector for a single text.
         
@@ -50,7 +50,7 @@ class SentenceTransformerService(EmbeddingService):
             # Return a zero vector as fallback
             return [0.0] * self.get_embedding_dimension()
     
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
         Generate embedding vectors for multiple texts.
         
@@ -72,6 +72,15 @@ class SentenceTransformerService(EmbeddingService):
             # Return zero vectors as fallback
             dimension = self.get_embedding_dimension()
             return [[0.0] * dimension for _ in range(len(texts))]
+    
+    # For backward compatibility, maintain the old method names with the new implementations
+    def get_embedding(self, text: str) -> List[float]:
+        """Alias for generate_embedding to maintain backward compatibility."""
+        return self.generate_embedding(text)
+    
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Alias for generate_embeddings to maintain backward compatibility."""
+        return self.generate_embeddings(texts)
     
     def get_embedding_dimension(self) -> int:
         """

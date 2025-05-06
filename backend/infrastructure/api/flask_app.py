@@ -250,7 +250,7 @@ class FlaskApiAdapter:
                     # Add the AI response as an assistant message
                     assistant_message = conversation_service.add_assistant_message(
                         conversation_id=conversation_id,
-                        content=result.answer
+                        content=result.response
                     )
                     
                     # Return both messages

@@ -28,7 +28,7 @@ class Config:
         
         # LLM configuration
         self.LLM_MODEL = os.getenv("LLM_MODEL", "llama2")
-        self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
         self.TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
         self.MAX_CONTEXT_LENGTH = int(os.getenv("MAX_CONTEXT_LENGTH", "4096"))
         self.MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))

@@ -1,12 +1,13 @@
 # src/application/service/query_service.py
-import time, os
+import time, os, uuid
 from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime
 
 from backend.domain.port.repository.vector_repository import VectorRepository
 from backend.domain.port.service.embedding_service import EmbeddingService
 from backend.domain.port.service.llm_service import LLMService
 from backend.application.service.conversation_service import ConversationService
-from backend.application.dto.query_dto import QueryRequestDTO, QueryResponseDTO, DocumentChunkDTO
+from backend.application.dto.query_dto import QueryRequestDTO, QueryResponseDTO, DocumentChunkDTO, RetrievedChunkDTO
 
 class QueryService:
     """
@@ -95,10 +96,9 @@ class QueryService:
         
         # Step 5: Generate answer using LLM
         answer = self.llm_service.generate_response(
-            query=query_request.query,
+            question=query_request.query,
             context=context,
-            conversation_history=conversation_history,
-            temperature=query_request.temperature
+            conversation_history=conversation_history
         )
         
         # Step 6: Store in conversation if conversation_id provided
@@ -112,14 +112,25 @@ class QueryService:
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
         
+        # Convert DocumentChunkDTO to RetrievedChunkDTO for the response
+        retrieved_chunks = []
+        for doc in similar_docs:
+            retrieved_chunk = RetrievedChunkDTO(
+                chunk_id=doc.id or str(uuid.uuid4()),
+                document_id=doc.metadata.get("document_id", "unknown"),
+                content=doc.text,
+                metadata=doc.metadata,
+                score=doc.similarity
+            )
+            retrieved_chunks.append(retrieved_chunk)
+        
         # Build response
         response = QueryResponseDTO(
             query=query_request.query,
-            answer=answer,
-            similar_documents=similar_docs,
+            response=answer,
             conversation_id=query_request.conversation_id,
-            processing_time_ms=processing_time_ms,
-            temperature=query_request.temperature
+            retrieved_chunks=retrieved_chunks,
+            timestamp=datetime.utcnow()
         )
         
         return response
@@ -134,16 +145,9 @@ class QueryService:
         Returns:
             Query response DTO
         """
-        start_time = time.time()
-        
         # Process the query
         response = self.process_query(query_request)
         
-        # Calculate processing time
-        processing_time_ms = (time.time() - start_time) * 1000
-        
-        # Build and return response
-        response.processing_time_ms = processing_time_ms
         return response
     
     def _create_context_from_documents(self, documents: List[DocumentChunkDTO]) -> str:

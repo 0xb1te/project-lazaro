@@ -8,7 +8,7 @@ from backend.domain.port.service.embedding_service import EmbeddingService
 class TestSentenceTransformerService(unittest.TestCase):
     """Test cases for the SentenceTransformerService."""
     
-    @patch('src.infrastructure.service.sentence_transformer_service.SentenceTransformer')
+    @patch('backend.infrastructure.service.sentence_transformer_service.SentenceTransformer')
     def setUp(self, mock_transformer):
         """Set up test fixtures."""
         # Mock the SentenceTransformer
@@ -93,7 +93,7 @@ class TestSentenceTransformerService(unittest.TestCase):
         embedding1 = [1.0, 0.0, 0.0]
         embedding2 = [0.0, 1.0, 0.0]
         
-        with patch('src.infrastructure.service.sentence_transformer_service.util.cos_sim') as mock_cos_sim:
+        with patch('backend.infrastructure.service.sentence_transformer_service.util.cos_sim') as mock_cos_sim:
             # Mock the cosine similarity calculation
             mock_cos_sim.return_value = np.array([[0.5]])
             
@@ -116,6 +116,25 @@ class TestSentenceTransformerService(unittest.TestCase):
         self.assertEqual(len(result), self.embedding_dimension)
         # Should be a zero vector
         self.assertTrue(all(v == 0.0 for v in result))
+        
+    def test_backward_compatibility(self):
+        """Test backward compatibility with the old method names."""
+        # Arrange
+        test_text = "This is a test"
+        test_texts = ["Text 1", "Text 2", "Text 3"]
+        expected_embedding = np.random.rand(self.embedding_dimension)
+        expected_embeddings = np.random.rand(3, self.embedding_dimension)
+        
+        # Mock single embedding
+        self.mock_model.encode.side_effect = [expected_embedding, expected_embeddings]
+        
+        # Act - Test both old and new method names
+        embedding_result = self.service.get_embedding(test_text)
+        embeddings_result = self.service.get_embeddings(test_texts)
+        
+        # Assert
+        self.assertEqual(len(embedding_result), self.embedding_dimension)
+        self.assertEqual(len(embeddings_result), 3)
 
 if __name__ == "__main__":
     unittest.main() 

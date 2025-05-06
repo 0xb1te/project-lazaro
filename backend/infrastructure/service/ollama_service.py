@@ -198,20 +198,29 @@ class OllamaService(LLMService):
         )
     
     def generate_response(self, 
-                         question: str, 
-                         context: str, 
+                         prompt: str = None, 
+                         temperature: float = 0.7, 
+                         max_tokens: Optional[int] = None,
+                         context: Optional[str] = None,
+                         question: str = None,
                          conversation_history: Optional[List[Dict[str, str]]] = None) -> str:
         """
         Generate a response to a question based on context and conversation history.
         
         Args:
-            question: The user's question
+            prompt: The prompt to generate a response for (interface requirement)
+            temperature: Controls randomness in generation (0.0-1.0)
+            max_tokens: Maximum number of tokens to generate
             context: Relevant context for answering the question
+            question: The user's question (backward compatibility)
             conversation_history: Optional list of previous messages
             
         Returns:
             Generated response text
         """
+        # For backward compatibility: if question is provided but prompt is not, use question
+        actual_prompt = prompt if prompt is not None else question
+        
         try:
             # Format conversation history
             formatted_history = ""
@@ -228,7 +237,7 @@ class OllamaService(LLMService):
                     formatted_history = ""
             
             # Create prompt template
-            prompt = f"""
+            prompt_template = f"""
                 You are a helpful assistant named LAZARO. Answer the following question based on the context provided below as 
                 if you were a senior developer, making me understand the codebase and how it works. Follow these rules strictly:
 
@@ -277,24 +286,24 @@ class OllamaService(LLMService):
                 - For any suggested changes, explain potential impacts on other parts of the codebase.
                 - Provide fallback mechanisms or error handling for any new features.
 
-                {formatted_history}
+                
 
                 Document Context:
                 {context}
 
                 Current Question:
-                {question}
+                {actual_prompt}
 
                 Answer:
                 """
 
-            self.logger.info(f"Provided data for Question: {str(question)} | context: \n {context} and conversation history: \n {conversation_history}")
+            self.logger.info(f"Provided data for Question: {str(actual_prompt)} | context: \n {context} and conversation history: \n {conversation_history}")
             
             # Create a fresh client for each attempt
             llm = self._get_ollama_client()
             
             # Get the answer with timeout handling
-            answer = llm.invoke(prompt)
+            answer = llm.invoke(prompt_template)
             
             return answer
             
@@ -313,13 +322,13 @@ class OllamaService(LLMService):
                         llm = self._get_ollama_client()
                         
                         # Retry
-                        answer = llm.invoke(prompt)
+                        answer = llm.invoke(prompt_template)
                         return answer
                     except Exception as retry_error:
                         self.logger.error(f"Error in retry after model pull: {str(retry_error)}")
                 
             # If we reach here, return the fallback response
-            return self._get_fallback_response(question)
+            return self._get_fallback_response(actual_prompt)
     
     def get_model_name(self) -> str:
         """

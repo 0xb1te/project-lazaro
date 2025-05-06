@@ -117,7 +117,7 @@ class DocumentChunkDTO:
 class DocumentUploadRequestDTO:
     """Data Transfer Object for a document upload request."""
     
-    file_path: str
+    file: Any  # This can be a FileStorage object from Flask
     filename: str
     conversation_id: Optional[str] = None
     clear_collection: bool = True
@@ -126,7 +126,6 @@ class DocumentUploadRequestDTO:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            "file_path": self.file_path,
             "filename": self.filename,
             "conversation_id": self.conversation_id,
             "clear_collection": self.clear_collection,
