@@ -63,9 +63,8 @@ class DocumentService:
         """
         start_time = time.time()
         
-        # Save the file to the upload folder
-        file_path = os.path.join(self.document_processor.upload_folder, upload_request.filename)
-        upload_request.file.save(file_path)
+        # File path is already provided in upload_request.file_path
+        file_path = upload_request.file_path
         
         # Determine file type
         is_zip = upload_request.filename.endswith(".zip")
@@ -77,6 +76,9 @@ class DocumentService:
         else:
             chunks = self._process_single_file(file_path)
         
+        # Create document ID
+        document_id = str(uuid.uuid4())
+        
         # Generate document chunks with embeddings
         document_chunks = []
         for chunk in chunks:
@@ -87,6 +89,7 @@ class DocumentService:
             document_chunk = DocumentChunk(
                 content=chunk.page_content,
                 metadata=chunk.metadata,
+                document_id=document_id,
                 embedding=embedding
             )
             
@@ -104,9 +107,6 @@ class DocumentService:
             conversation_id = conversation_dto.id
         else:
             conversation_id = upload_request.conversation_id
-        
-        # Create document ID
-        document_id = str(uuid.uuid4())
         
         # Add document to conversation
         document_info = {
@@ -141,6 +141,7 @@ class DocumentService:
             message=message,
             conversation_id=conversation_id,
             document_id=document_id,
+            compression_enabled=upload_request.compression_enabled,
             chunks_processed=len(chunks),
             file_type=file_type,
             processing_time_ms=processing_time_ms

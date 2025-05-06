@@ -15,7 +15,6 @@ services:
       - "5000:5000"
     volumes:
       - ./storage:/app/storage
-      - ./uploads:/app/uploads
     depends_on:
       - qdrant
       - ollama

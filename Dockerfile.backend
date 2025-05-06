@@ -23,7 +23,7 @@ COPY backend/ /app/backend/
 COPY .env /app/.env
 
 # Create necessary directories
-RUN mkdir -p /app/storage/conversations /app/storage/documents /app/uploads
+RUN mkdir -p /app/storage/conversations /app/storage/documents
 
 # Set the entrypoint
 ENTRYPOINT ["python", "-m", "backend.run"]

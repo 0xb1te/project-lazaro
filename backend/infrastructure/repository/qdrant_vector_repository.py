@@ -81,10 +81,10 @@ class QdrantVectorRepository(VectorRepository):
         for chunk in document_chunks:
             # Skip chunks without embeddings
             if chunk.embedding is None:
-                self.logger.warning(f"Skipping chunk with no embedding: {chunk.id}")
+                self.logger.warning(f"Skipping chunk with no embedding: {chunk.chunk_id}")
                 continue
             
-            chunk_id = chunk.id
+            chunk_id = chunk.chunk_id
             ids.append(chunk_id)
             
             points.append(

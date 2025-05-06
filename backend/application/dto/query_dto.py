@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+import os
 
 @dataclass
 class QueryRequestDTO:
@@ -117,8 +118,8 @@ class DocumentChunkDTO:
 class DocumentUploadRequestDTO:
     """Data Transfer Object for a document upload request."""
     
-    file: Any  # This can be a FileStorage object from Flask
     filename: str
+    file_path: str  # Path to the uploaded file
     conversation_id: Optional[str] = None
     clear_collection: bool = True
     compression_enabled: bool = True
@@ -127,6 +128,7 @@ class DocumentUploadRequestDTO:
         """Convert to dictionary for serialization."""
         return {
             "filename": self.filename,
+            "file_path": self.file_path,
             "conversation_id": self.conversation_id,
             "clear_collection": self.clear_collection,
             "compression_enabled": self.compression_enabled

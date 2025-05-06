@@ -40,7 +40,7 @@ class Config:
         # Storage configuration
         current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.join(current_dir, "storage"))
-        self.UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(current_dir, "uploads"))
+        self.UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join(self.STORAGE_DIR, "documents"))
         
         # Ensure directories exist
         os.makedirs(self.STORAGE_DIR, exist_ok=True)

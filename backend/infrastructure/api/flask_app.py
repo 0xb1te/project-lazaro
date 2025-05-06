@@ -292,11 +292,20 @@ class FlaskApiAdapter:
             # Get conversation ID from request (optional)
             conversation_id = request.form.get("conversation_id")
             
-            # Create document upload request DTO
+            # Create storage/documents directory if it doesn't exist
+            documents_dir = os.path.join(self.config.STORAGE_DIR, "documents")
+            os.makedirs(documents_dir, exist_ok=True)
+            
+            # Save the file to the documents directory
+            secure_filename_value = secure_filename(file.filename)
+            file_path = os.path.join(documents_dir, secure_filename_value)
+            file.save(file_path)
+            
+            # Create document upload request DTO with the file path
             upload_request = DocumentUploadRequestDTO(
-                file=file,
-                filename=secure_filename(file.filename),
-                conversation_id=conversation_id
+                filename=secure_filename_value,
+                conversation_id=conversation_id,
+                file_path=file_path
             )
             
             # Process the upload
@@ -305,6 +314,9 @@ class FlaskApiAdapter:
             
             return jsonify(result.to_dict()), 200
         except Exception as e:
+            import traceback
+            print(f"Error uploading document: {str(e)}")
+            print(traceback.format_exc())
             return jsonify({"error": str(e)}), 500
     
     def get_conversation_documents(self, conversation_id: str) -> Response:
