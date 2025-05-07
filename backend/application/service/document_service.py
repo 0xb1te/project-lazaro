@@ -85,7 +85,7 @@ class DocumentService:
             
             # Handle zip files
             if file_extension == '.zip':
-                chunks = self._process_zip_file(upload_request.file_path)
+                chunks = self._process_zip_file(upload_request.file_path, upload_request.conversation_id)
                 if not chunks:
                     raise DocumentProcessingError("No processable content found in zip file")
                     
@@ -238,13 +238,14 @@ class DocumentService:
             logger.error(f"Error processing file {file_path}: {str(e)}")
             return [Document(page_content=f"Error processing file: {str(e)}", metadata={"file_path": file_path, "error": True})]
 
-    def _process_zip_file(self, zip_path: str) -> List[Document]:
+    def _process_zip_file(self, zip_path: str, conversation_id: str) -> List[Document]:
         """
         Process a ZIP file by extracting and processing its contents.
         Uses only built-in Python libraries.
 
         Args:
             zip_path: Path to the ZIP file
+            conversation_id: ID of the conversation
 
         Returns:
             List of document chunks
@@ -253,6 +254,10 @@ class DocumentService:
         processed_files = 0
         skipped_files = 0
         
+        # Store all file contents first to analyze relationships
+        file_contents = {}
+        file_analyses = {}
+        
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 # First, check if the zip file is not too large
@@ -260,107 +265,149 @@ class DocumentService:
                 if total_size > 100 * 1024 * 1024:  # 100MB limit
                     raise DocumentProcessingError("ZIP file is too large (max 100MB)")
                 
-                # Process each file in the zip
+                # First pass: collect all valid files and their contents
                 for file_info in zip_ref.filelist:
-                    try:
-                        # Skip directories
-                        if file_info.filename.endswith('/'):
-                            continue
-                            
-                        # Skip files in binary directories
-                        if any(pattern in file_info.filename for pattern in [
+                    # Skip directories and unwanted paths
+                    if (file_info.filename.endswith('/') or
+                        any(pattern in file_info.filename for pattern in [
                             '__pycache__/', '.git/', 'node_modules/', 
                             'venv/', '.env/', 'build/', 'dist/',
                             'bin/', 'obj/'
-                        ]):
-                            skipped_files += 1
-                            logger.debug(f"Skipping binary directory file: {file_info.filename}")
-                            continue
-                        
-                        # Get file extension
-                        _, ext = os.path.splitext(file_info.filename)
-                        ext = ext.lower()
-                        
-                        # Skip unwanted file types
-                        if ext not in [
-                            '.txt', '.py', '.js', '.html', '.css', '.json', '.md',
-                            '.xml', '.yaml', '.yml', '.ini', '.conf', '.cfg',
-                            '.ipynb', '.sh', '.bat', '.sql', '.csv', '.tsv',
-                            '.log', '.rst', '.tex'
-                        ]:
-                            skipped_files += 1
-                            logger.debug(f"Skipping unsupported file type: {file_info.filename}")
-                            continue
-                        
-                        # Read file content
-                        with zip_ref.open(file_info.filename) as file:
-                            binary_content = file.read()
-                            
-                            # Try different encodings
-                            content = None
-                            for encoding in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']:
-                                try:
-                                    content = binary_content.decode(encoding)
-                                    break
-                                except UnicodeDecodeError:
-                                    continue
-                            
-                            if content is None:
-                                content = binary_content.decode('utf-8', errors='ignore')
-                            
-                            # Create document chunks
-                            text_splitter = CharacterTextSplitter(
-                                chunk_size=1000,
-                                chunk_overlap=200,
-                                separator="\n"
-                            )
-                            
-                            texts = text_splitter.split_text(content)
-                            logger.debug(f"Created {len(texts)} chunks from file: {file_info.filename}")
-                            
-                            for i, text in enumerate(texts):
-                                chunk = Document(
-                                    page_content=text,
-                                    metadata={
-                                        "source": zip_path,
-                                        "filename": file_info.filename,
-                                        "chunk": i,
-                                        "file_type": ext,
-                                        "compressed": True
-                                    }
-                                )
-                                chunks.append(chunk)
-                            
-                            processed_files += 1
-                            logger.debug(f"Successfully processed file: {file_info.filename}")
-                            
-                            # Special handling for Python files
-                            if ext == '.py':
-                                analysis = self.file_analysis_service.analyze_file(
-                                    FileAnalysisRequestDTO(
-                                        file_path=file_info.filename,
-                                        content=content
-                                    )
-                                )
-                                
-                                analysis_id = str(uuid.uuid4())
-                                analysis_doc = Document(
-                                    id=analysis_id,
-                                    filename=f"analysis_{file_info.filename}",
-                                    content=json.dumps(analysis.to_dict()),
-                                    metadata={
-                                        "type": "analysis",
-                                        "original_file": file_info.filename,
-                                        "compressed": True
-                                    }
-                                )
-                                chunks.append(analysis_doc)
-                                logger.debug(f"Added analysis document for Python file: {file_info.filename}")
-                                
-                    except Exception as e:
-                        logger.warning(f"Error processing file {file_info.filename} in zip: {str(e)}")
-                        skipped_files += 1
+                        ])):
                         continue
+                    
+                    # Get file extension
+                    _, ext = os.path.splitext(file_info.filename)
+                    ext = ext.lower()
+                    
+                    # Process only supported file types
+                    if ext in [
+                        '.txt', '.py', '.js', '.html', '.css', '.json', '.md',
+                        '.xml', '.yaml', '.yml', '.ini', '.conf', '.cfg',
+                        '.ipynb', '.sh', '.bat', '.sql', '.csv', '.tsv',
+                        '.log', '.rst', '.tex'
+                    ]:
+                        try:
+                            # Read file content
+                            with zip_ref.open(file_info.filename) as file:
+                                binary_content = file.read()
+                                
+                                # Try different encodings
+                                content = None
+                                for encoding in ['utf-8', 'latin1', 'cp1252', 'iso-8859-1']:
+                                    try:
+                                        content = binary_content.decode(encoding)
+                                        break
+                                    except UnicodeDecodeError:
+                                        continue
+                                
+                                if content is None:
+                                    content = binary_content.decode('utf-8', errors='ignore')
+                                
+                                file_contents[file_info.filename] = {
+                                    'content': content,
+                                    'type': ext,
+                                    'size': file_info.file_size
+                                }
+                                processed_files += 1
+                        except Exception as e:
+                            logger.warning(f"Error reading file {file_info.filename}: {str(e)}")
+                            skipped_files += 1
+                            continue
+                    else:
+                        skipped_files += 1
+                        logger.debug(f"Skipping unsupported file type: {file_info.filename}")
+                
+                # Second pass: analyze files and their relationships
+                for filename, file_data in file_contents.items():
+                    try:
+                        # Analyze each file
+                        analysis = self.file_analysis_service.analyze_file(
+                            FileAnalysisRequestDTO(
+                                file_path=filename,
+                                content=file_data['content']
+                            )
+                        )
+                        file_analyses[filename] = analysis
+                        
+                        # Create analysis document
+                        analysis_id = str(uuid.uuid4())
+                        analysis_doc = Document(
+                            page_content=json.dumps(analysis.to_dict()),
+                            metadata={
+                                "type": "analysis",
+                                "original_file": filename,
+                                "file_type": file_data['type'],
+                                "compressed": True,
+                                "conversation_id": conversation_id,
+                                "id": analysis_id,
+                                "filename": f"analysis_{filename}"
+                            }
+                        )
+                        chunks.append(analysis_doc)
+                        
+                        # Create content chunks
+                        text_splitter = CharacterTextSplitter(
+                            chunk_size=1000,
+                            chunk_overlap=200,
+                            separator="\n"
+                        )
+                        
+                        texts = text_splitter.split_text(file_data['content'])
+                        
+                        for i, text in enumerate(texts):
+                            chunk = Document(
+                                page_content=text,
+                                metadata={
+                                    "source": zip_path,
+                                    "filename": filename,
+                                    "chunk": i,
+                                    "total_chunks": len(texts),
+                                    "file_type": file_data['type'],
+                                    "compressed": True,
+                                    "file_size": file_data['size'],
+                                    "analysis_id": analysis_id,
+                                    "conversation_id": conversation_id
+                                }
+                            )
+                            chunks.append(chunk)
+                    except Exception as e:
+                        logger.warning(f"Error analyzing file {filename}: {str(e)}")
+                        continue
+                
+                # Generate and add index document
+                if file_analyses:
+                    try:
+                        # Generate index content
+                        index_content = self.file_analysis_service.create_index_document(list(file_analyses.values()))
+                        
+                        # Save index to conversation storage
+                        storage_dir = os.path.join(self.document_processor.storage_dir, "conversations", conversation_id)
+                        os.makedirs(storage_dir, exist_ok=True)
+                        index_path = os.path.join(storage_dir, "index.md")
+                        
+                        with open(index_path, 'w', encoding='utf-8') as f:
+                            f.write(index_content)
+                        
+                        # Create index document for vector store
+                        index_doc = Document(
+                            page_content=index_content,
+                            metadata={
+                                "type": "index",
+                                "compressed": True,
+                                "conversation_id": conversation_id,
+                                "total_files": len(file_analyses),
+                                "processed_files": processed_files,
+                                "skipped_files": skipped_files,
+                                "storage_path": index_path,
+                                "id": str(uuid.uuid4()),
+                                "filename": "index.md"
+                            }
+                        )
+                        chunks.append(index_doc)
+                        logger.info(f"Saved index document to {index_path}")
+                    except Exception as e:
+                        logger.warning(f"Error generating index document: {str(e)}")
         
         except Exception as e:
             logger.error(f"Error processing zip file: {str(e)}")

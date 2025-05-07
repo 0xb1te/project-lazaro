@@ -495,7 +495,8 @@ class FlaskApiAdapter:
                 metadata_filter={
                     "type": "analysis",
                     "conversation_id": conversation_id
-                }
+                },
+                collection_name=conversation_id  # Use conversation ID as collection name
             )
             
             # Convert to FileAnalysis objects

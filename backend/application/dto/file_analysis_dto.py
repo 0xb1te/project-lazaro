@@ -3,14 +3,44 @@ from typing import List, Dict, Optional
 from datetime import datetime
 
 @dataclass
+class CodeMetrics:
+    """Data class representing code quality metrics."""
+    lines_of_code: int
+    comment_lines: int
+    complexity: int
+    maintainability_index: float
+
+    def to_dict(self) -> Dict:
+        """Convert metrics to a dictionary."""
+        return {
+            'lines_of_code': self.lines_of_code,
+            'comment_lines': self.comment_lines,
+            'complexity': self.complexity,
+            'maintainability_index': self.maintainability_index
+        }
+
+@dataclass
 class FileAnalysis:
     """Data class representing a file analysis result."""
     file_path: str
-    summary: str
-    relationships: List[Dict[str, str]]
-    hierarchy: Dict[str, List[str]]
-    swot: Dict[str, List[str]]
+    summary: Dict[str, any]  # Enhanced summary with components, patterns, etc.
+    relationships: List[Dict[str, str]]  # Enhanced relationships with more types
+    hierarchy: Dict[str, List[str]]  # Enhanced hierarchy with lifecycle info
+    swot: Dict[str, List[str]]  # Detailed SWOT analysis
+    metrics: CodeMetrics
     timestamp: datetime
+
+    def to_dict(self) -> Dict:
+        """Convert analysis to a dictionary."""
+        return {
+            'file_path': self.file_path,
+            'summary': self.summary,
+            'relationships': self.relationships,
+            'hierarchy': self.hierarchy,
+            'swot': self.swot,
+            'metrics': self.metrics.to_dict(),
+            'timestamp': self.timestamp.isoformat()
+        }
 
 @dataclass
 class FileAnalysisRequestDTO:
@@ -23,21 +53,25 @@ class FileAnalysisRequestDTO:
 class FileAnalysisResponseDTO:
     """Data class representing a file analysis response."""
     file_path: str
-    summary: str
+    summary: Dict[str, any]
     relationships: List[Dict[str, str]]
     hierarchy: Dict[str, List[str]]
     swot: Dict[str, List[str]]
+    metrics: CodeMetrics
     timestamp: datetime
+    index_content: Optional[str] = None
 
     def to_dict(self) -> Dict:
-        """Convert the response to a dictionary."""
+        """Convert response to a dictionary."""
         return {
             'file_path': self.file_path,
             'summary': self.summary,
             'relationships': self.relationships,
             'hierarchy': self.hierarchy,
             'swot': self.swot,
-            'timestamp': self.timestamp.isoformat()
+            'metrics': self.metrics.to_dict(),
+            'timestamp': self.timestamp.isoformat(),
+            'index_content': self.index_content
         }
 
 @dataclass

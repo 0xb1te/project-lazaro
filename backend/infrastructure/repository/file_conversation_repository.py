@@ -112,9 +112,8 @@ class FileConversationRepository(ConversationRepository):
                 vector_repository = container.get_vector_repository()
                 
                 # Delete the conversation collection
-                collection_name = f"{config.BASE_COLLECTION_NAME}_conversation_{conversation_id}"
-                vector_repository.delete_collection(collection_name)
-                print(f"Deleted vector collection: {collection_name}")
+                vector_repository.delete_collection(conversation_id)
+                print(f"Deleted vector collection: {conversation_id}")
             except Exception as e:
                 print(f"Error deleting vector collection: {str(e)}")
                 # Continue even if collection deletion fails

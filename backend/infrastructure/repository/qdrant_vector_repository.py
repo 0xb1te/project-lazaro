@@ -159,7 +159,21 @@ class QdrantVectorRepository(VectorRepository):
             # Convert documents to points
             points = []
             for doc in documents:
-                # Skip documents without embeddings (like analysis documents)
+                # Handle analysis documents (without embeddings) differently
+                if isinstance(doc, DocumentChunk) and doc.metadata.get('type') == 'analysis':
+                    point = models.PointStruct(
+                        id=doc.chunk_id,
+                        vector=[0.0] * self.embedding_dimension,  # Dummy vector for analysis docs
+                        payload={
+                            'content': doc.content,
+                            'metadata': doc.metadata,
+                            'document_id': doc.document_id
+                        }
+                    )
+                    points.append(point)
+                    continue
+                
+                # Skip other documents without embeddings
                 if not hasattr(doc, 'embedding') or doc.embedding is None:
                     continue
                     
@@ -457,7 +471,7 @@ class QdrantVectorRepository(VectorRepository):
             # Search for matching documents
             search_result = self.client.scroll(
                 collection_name=collection_name,
-                filter=search_filter,
+                scroll_filter=search_filter,
                 limit=limit
             )
             
@@ -466,7 +480,7 @@ class QdrantVectorRepository(VectorRepository):
             for point in search_result[0]:
                 results.append({
                     "id": point.id,
-                    "text": point.payload["text"],
+                    "content": point.payload.get("content", ""),
                     "metadata": point.payload.get("metadata", {})
                 })
             
