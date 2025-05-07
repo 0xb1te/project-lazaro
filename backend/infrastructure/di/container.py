@@ -15,6 +15,7 @@ from backend.infrastructure.service.document_processor import DocumentProcessor
 from backend.application.service.conversation_service import ConversationService
 from backend.application.service.document_service import DocumentService
 from backend.application.service.query_service import QueryService
+from backend.application.service.file_analysis_service import FileAnalysisService
 
 from backend.infrastructure.config import Config
 
@@ -49,8 +50,9 @@ class Container:
             self._instances["vector_repository"] = QdrantVectorRepository(
                 host=self.config.QDRANT_HOST,
                 port=self.config.QDRANT_PORT,
-                collection_name=self.config.COLLECTION_NAME,
-                embedding_dimension=self.config.EMBEDDING_DIMENSION
+                collection_name=self.config.BASE_COLLECTION_NAME,
+                embedding_dimension=self.config.EMBEDDING_DIMENSION,
+                use_per_conversation_collections=self.config.USE_PER_CONVERSATION_COLLECTIONS
             )
         return self._instances["vector_repository"]
     
@@ -89,15 +91,21 @@ class Container:
         return self._instances["conversation_service"]
     
     def get_document_service(self) -> DocumentService:
-        """Get the document service instance."""
-        if "document_service" not in self._instances:
-            self._instances["document_service"] = DocumentService(
-                vector_repository=self.get_vector_repository(),
-                embedding_service=self.get_embedding_service(),
-                conversation_service=self.get_conversation_service(),
-                document_processor=self.get_document_processor()
-            )
-        return self._instances["document_service"]
+        """Get document service instance."""
+        return DocumentService(
+            vector_repository=self.get_vector_repository(),
+            embedding_service=self.get_embedding_service(),
+            conversation_service=self.get_conversation_service(),
+            document_processor=self.get_document_processor(),
+            file_analysis_service=self.get_file_analysis_service()
+        )
+    
+    def get_file_analysis_service(self) -> FileAnalysisService:
+        """Get file analysis service instance."""
+        return FileAnalysisService(
+            llm_service=self.get_llm_service(),
+            embedding_service=self.get_embedding_service()
+        )
     
     def get_query_service(self) -> QueryService:
         """Get the query service instance."""

@@ -291,7 +291,7 @@ class OllamaService(LLMService):
                 Document Context:
                 {context}
 
-                Current Question:
+                Current Question (do not use the question as the context):
                 {actual_prompt}
 
                 Answer:

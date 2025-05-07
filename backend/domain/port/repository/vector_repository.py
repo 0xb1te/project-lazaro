@@ -136,3 +136,36 @@ class VectorRepository(ABC):
             List of documents matching the metadata filter
         """
         pass
+
+    @abstractmethod
+    def create_conversation_collection(self, conversation_id: str) -> str:
+        """
+        Create a new collection for a conversation.
+        
+        Args:
+            conversation_id: ID of the conversation
+            
+        Returns:
+            Name of the created collection
+        """
+        pass
+
+    @abstractmethod
+    def list_conversation_collections(self) -> List[str]:
+        """
+        List all collections associated with conversations.
+        
+        Returns:
+            List of collection names
+        """
+        pass
+
+    @abstractmethod
+    def delete_conversation_collection(self, conversation_id: str) -> None:
+        """
+        Delete a collection associated with a conversation.
+        
+        Args:
+            conversation_id: ID of the conversation
+        """
+        pass

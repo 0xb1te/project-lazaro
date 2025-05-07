@@ -87,7 +87,7 @@ class FileConversationRepository(ConversationRepository):
     
     def delete(self, conversation_id: str) -> bool:
         """
-        Delete a conversation.
+        Delete a conversation and its associated vector collection.
         
         Args:
             conversation_id: The unique identifier for the conversation
@@ -98,7 +98,27 @@ class FileConversationRepository(ConversationRepository):
         file_path = os.path.join(self.conversations_dir, f"{conversation_id}.json")
         
         try:
+            # Delete the conversation file
             os.remove(file_path)
+            
+            # Delete the associated vector collection
+            try:
+                from backend.infrastructure.di.container import Container
+                from backend.infrastructure.config import Config
+                
+                # Get vector repository instance
+                config = Config()
+                container = Container(config)
+                vector_repository = container.get_vector_repository()
+                
+                # Delete the conversation collection
+                collection_name = f"{config.BASE_COLLECTION_NAME}_conversation_{conversation_id}"
+                vector_repository.delete_collection(collection_name)
+                print(f"Deleted vector collection: {collection_name}")
+            except Exception as e:
+                print(f"Error deleting vector collection: {str(e)}")
+                # Continue even if collection deletion fails
+            
             return True
         except FileNotFoundError:
             return False
@@ -153,6 +173,17 @@ class FileConversationRepository(ConversationRepository):
         # Ensure the message has a timestamp
         if "timestamp" not in message_data:
             message_data["timestamp"] = datetime.utcnow().isoformat()
+        
+        # Check for duplicate messages (same content and role within a 5-second window)
+        current_time = datetime.fromisoformat(message_data["timestamp"])
+        for existing_message in reversed(conversation["messages"]):  # Check most recent messages first
+            if (existing_message.get("content") == message_data.get("content") and
+                existing_message.get("role") == message_data.get("role")):
+                existing_time = datetime.fromisoformat(existing_message["timestamp"])
+                time_diff = abs((current_time - existing_time).total_seconds())
+                if time_diff < 5:  # 5-second window
+                    print(f"Duplicate message detected within {time_diff:.2f} seconds")
+                    return existing_message
         
         # Add message to the conversation
         conversation["messages"].append(message_data)

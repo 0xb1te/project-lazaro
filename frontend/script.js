@@ -25,6 +25,27 @@ const editTitleInput = document.getElementById("edit-title-input");
 const saveEditTitleBtn = document.getElementById("save-edit-title");
 const cancelEditTitleBtn = document.getElementById("cancel-edit-title");
 const conversationDocuments = document.getElementById("conversation-documents");
+const viewIndexBtn = document.getElementById("view-index-btn");
+const indexModal = document.getElementById("index-modal");
+const closeIndexModal = document.getElementById("close-index-modal");
+const indexContent = document.getElementById("index-content");
+const documentsPanel = document.getElementById("documents-panel");
+const viewDocumentsBtn = document.getElementById("view-documents-btn");
+const documentsList = document.getElementById("documents-list");
+const documentContentModal = document.getElementById("document-content-modal");
+const documentContentTitle = document.getElementById("document-content-title");
+const documentContent = document.getElementById("document-content");
+const closeDocumentContent = document.getElementById("close-document-content");
+const documentAnalysisModal = document.getElementById(
+  "document-analysis-modal"
+);
+const documentAnalysisTitle = document.getElementById(
+  "document-analysis-title"
+);
+const documentAnalysis = document.getElementById("document-analysis");
+const closeDocumentAnalysis = document.getElementById(
+  "close-document-analysis"
+);
 
 // Templates
 const conversationTemplate = document.getElementById("conversation-template");
@@ -239,6 +260,42 @@ function setupEventListeners() {
       }
     });
   }
+
+  // Index modal event listeners
+  viewIndexBtn.addEventListener("click", showIndexModal);
+  closeIndexModal.addEventListener("click", hideIndexModal);
+  indexModal.addEventListener("click", (e) => {
+    if (e.target === indexModal) {
+      hideIndexModal();
+    }
+  });
+
+  // Documents panel toggle
+  viewDocumentsBtn.addEventListener("click", () => {
+    documentsPanel.classList.toggle("hidden");
+  });
+
+  // Document content modal
+  closeDocumentContent.addEventListener("click", () => {
+    documentContentModal.classList.add("hidden");
+  });
+
+  documentContentModal.addEventListener("click", (e) => {
+    if (e.target === documentContentModal) {
+      documentContentModal.classList.add("hidden");
+    }
+  });
+
+  // Document analysis modal
+  closeDocumentAnalysis.addEventListener("click", () => {
+    documentAnalysisModal.classList.add("hidden");
+  });
+
+  documentAnalysisModal.addEventListener("click", (e) => {
+    if (e.target === documentAnalysisModal) {
+      documentAnalysisModal.classList.add("hidden");
+    }
+  });
 }
 
 // Drag and Drop Event Handlers
@@ -725,6 +782,7 @@ async function deleteDocument(conversationId, documentId, event) {
 function renderConversationDocuments(documents) {
   // Clear current documents
   conversationDocuments.innerHTML = "";
+  documentsList.innerHTML = "";
 
   if (documents.length === 0) {
     conversationDocuments.style.display = "none";
@@ -742,40 +800,40 @@ function renderConversationDocuments(documents) {
   }
 
   // Add document items
-  const docsContainer = document.createElement("div");
-  docsContainer.className = "flex flex-wrap";
-
   documents.forEach((doc) => {
+    // Add to conversation documents (compact view)
     const template = document.getElementById("document-template");
     const docNode = template.content.cloneNode(true);
     const docItem = docNode.querySelector(".document-item");
     const docName = docNode.querySelector(".document-name");
+    const docInfo = docNode.querySelector(".document-info");
+    const viewDocBtn = docNode.querySelector(".view-document-btn");
+    const viewAnalysisBtn = docNode.querySelector(".view-analysis-btn");
     const deleteButton = docNode.querySelector(".delete-document");
 
     docName.textContent = doc.filename;
+    docInfo.textContent = `Type: ${doc.file_type || "unknown"}`;
 
     // Store document ID as a data attribute
     docItem.dataset.id = doc.id;
 
-    // Set different icon for zip files
-    if (doc.filename.endsWith(".zip")) {
-      const docIcon = docItem.querySelector("svg");
-      docIcon.innerHTML = `
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z M12 2v2m0 10v2m0-6v2" />
-      `;
-    }
+    // Add event listeners
+    viewDocBtn.addEventListener("click", () => {
+      showDocumentContent(doc);
+    });
 
-    // Add event listener for document deletion
+    viewAnalysisBtn.addEventListener("click", () => {
+      showDocumentAnalysis(doc);
+    });
+
     if (deleteButton) {
       deleteButton.addEventListener("click", (event) => {
         deleteDocument(activeConversationId, doc.id, event);
       });
     }
 
-    docsContainer.appendChild(docNode);
+    documentsList.appendChild(docNode);
   });
-
-  conversationDocuments.appendChild(docsContainer);
 }
 
 function renderActiveConversation() {
@@ -1367,3 +1425,89 @@ function updateModelInfo() {
 
 // Make copyToClipboard global so it can be called from HTML
 window.copyToClipboard = copyToClipboard;
+
+async function showIndexModal() {
+  if (!activeConversationId) {
+    showToast("No active conversation", "error");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${activeConversationId}/index`
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to load index");
+    }
+
+    const data = await response.json();
+
+    // Convert markdown to HTML using marked.js
+    const content = marked.parse(data.content);
+
+    // Display the content
+    indexContent.innerHTML = content;
+
+    // Show the modal
+    indexModal.classList.remove("hidden");
+  } catch (error) {
+    console.error("Error loading index:", error);
+    showToast(`Error loading index: ${error.message}`, "error");
+  }
+}
+
+function hideIndexModal() {
+  indexModal.classList.add("hidden");
+  indexContent.innerHTML = "";
+}
+
+// Add new functions for document handling
+async function showDocumentContent(doc) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${activeConversationId}/documents/${doc.id}/content`
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to load document content");
+    }
+
+    const data = await response.json();
+
+    documentContentTitle.textContent = doc.filename;
+    documentContent.textContent = data.content;
+
+    // Apply syntax highlighting if it's a code file
+    if (doc.file_type && doc.file_type.match(/\.(js|py|html|css|json)$/)) {
+      hljs.highlightElement(documentContent);
+    }
+
+    documentContentModal.classList.remove("hidden");
+  } catch (error) {
+    console.error("Error loading document content:", error);
+    showToast(`Error loading document content: ${error.message}`, "error");
+  }
+}
+
+async function showDocumentAnalysis(doc) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/conversations/${activeConversationId}/documents/${doc.id}/analysis`
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to load document analysis");
+    }
+
+    const data = await response.json();
+
+    documentAnalysisTitle.textContent = `Analysis: ${doc.filename}`;
+    documentAnalysis.innerHTML = marked.parse(data.content);
+
+    documentAnalysisModal.classList.remove("hidden");
+  } catch (error) {
+    console.error("Error loading document analysis:", error);
+    showToast(`Error loading document analysis: ${error.message}`, "error");
+  }
+}

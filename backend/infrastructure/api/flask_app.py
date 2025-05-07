@@ -7,12 +7,14 @@ from datetime import datetime
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+import json
 
 from backend.infrastructure.config import Config
 from backend.infrastructure.di.container import Container
 from backend.application.dto.query_dto import QueryRequestDTO, QueryResponseDTO
 from backend.application.dto.conversation_dto import ConversationDTO, MessageDTO, DocumentDTO
 from backend.application.dto.document_dto import DocumentUploadRequestDTO, DocumentUploadResponseDTO
+from backend.application.dto.file_analysis_dto import FileAnalysisRequestDTO, FileAnalysisResponseDTO, FileAnalysis, IndexDocumentDTO
 
 class FlaskApiAdapter:
     """
@@ -58,6 +60,10 @@ class FlaskApiAdapter:
         self.app.route("/upload", methods=["POST"])(self.upload_document)
         self.app.route("/conversations/<conversation_id>/documents", methods=["GET"])(self.get_conversation_documents)
         self.app.route("/conversations/<conversation_id>/documents/<document_id>", methods=["DELETE"])(self.delete_document)
+        
+        # File analysis routes
+        self.app.route("/analyze", methods=["POST"])(self.analyze_file)
+        self.app.route("/conversations/<conversation_id>/index", methods=["GET"])(self.get_index_document)
         
         # Query routes
         self.app.route("/ask", methods=["POST"])(self.ask_question)
@@ -120,7 +126,8 @@ class FlaskApiAdapter:
             "environment": {
                 "QDRANT_HOST": self.config.QDRANT_HOST,
                 "QDRANT_PORT": self.config.QDRANT_PORT,
-                "COLLECTION_NAME": self.config.COLLECTION_NAME,
+                "BASE_COLLECTION_NAME": self.config.BASE_COLLECTION_NAME,
+                "USE_PER_CONVERSATION_COLLECTIONS": self.config.USE_PER_CONVERSATION_COLLECTIONS,
                 "LLM_MODEL": self.config.LLM_MODEL,
                 "OLLAMA_BASE_URL": self.config.OLLAMA_BASE_URL,
                 "STORAGE_DIR": self.config.STORAGE_DIR,
@@ -227,7 +234,22 @@ class FlaskApiAdapter:
             
             # Use the appropriate method based on role
             if role == "user":
-                # Add the user message
+                # Check if this message already exists in the conversation
+                conversation = conversation_service.get_conversation(conversation_id)
+                if conversation:
+                    # Look for duplicate messages within the last 5 seconds
+                    current_time = datetime.now()
+                    for msg in reversed(conversation.messages):
+                        if (msg.role == role and 
+                            msg.content == content and 
+                            (current_time - datetime.fromisoformat(msg.timestamp)).total_seconds() < 5):
+                            # Return existing message if found
+                            return jsonify({
+                                "user_message": msg.to_dict(),
+                                "assistant_message": None
+                            })
+                
+                # Add the user message if no duplicate found
                 message = conversation_service.add_user_message(conversation_id, content)
                 
                 if not message:
@@ -418,4 +440,83 @@ class FlaskApiAdapter:
             import traceback
             print(f"Error deleting document: {str(e)}")
             print(traceback.format_exc())
+            return jsonify({"error": str(e)}), 500
+    
+    def analyze_file(self) -> Response:
+        """Handle file analysis request."""
+        try:
+            data = request.get_json() or {}
+            file_path = data.get("file_path")
+            content = data.get("content")
+            conversation_id = data.get("conversation_id")
+            
+            if not file_path or not content:
+                return jsonify({"error": "File path and content are required"}), 400
+            
+            # Create analysis request
+            analysis_request = FileAnalysisRequestDTO(
+                file_path=file_path,
+                content=content,
+                conversation_id=conversation_id
+            )
+            
+            # Get file analysis service
+            file_analysis_service = self.container.get_file_analysis_service()
+            
+            # Analyze file
+            analysis = file_analysis_service.analyze_file(
+                file_path=analysis_request.file_path,
+                content=analysis_request.content
+            )
+            
+            # Convert to response DTO
+            response = FileAnalysisResponseDTO(
+                file_path=analysis.file_path,
+                summary=analysis.summary,
+                relationships=analysis.relationships,
+                hierarchy=analysis.hierarchy,
+                swot=analysis.swot,
+                timestamp=analysis.timestamp.isoformat()
+            )
+            
+            return jsonify(response.to_dict())
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    def get_index_document(self, conversation_id: str) -> Response:
+        """Get the index document for a conversation."""
+        try:
+            # Get file analysis service
+            file_analysis_service = self.container.get_file_analysis_service()
+            
+            # Get all analyses for the conversation
+            vector_repository = self.container.get_vector_repository()
+            analyses_data = vector_repository.search_by_metadata(
+                metadata_filter={
+                    "type": "analysis",
+                    "conversation_id": conversation_id
+                }
+            )
+            
+            # Convert to FileAnalysis objects
+            analyses = []
+            for data in analyses_data:
+                try:
+                    analysis_dict = json.loads(data["content"])
+                    analyses.append(FileAnalysis.from_dict(analysis_dict))
+                except Exception as e:
+                    print(f"Error parsing analysis: {str(e)}")
+                    continue
+            
+            # Generate index document
+            index_content = file_analysis_service.create_index_document(analyses)
+            
+            # Create index document DTO
+            index_doc = IndexDocumentDTO(
+                content=index_content,
+                conversation_id=conversation_id
+            )
+            
+            return jsonify(index_doc.to_dict())
+        except Exception as e:
             return jsonify({"error": str(e)}), 500

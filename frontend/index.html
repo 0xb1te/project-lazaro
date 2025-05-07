@@ -143,6 +143,44 @@
                 />
               </svg>
             </button>
+            <button
+              id="view-index-btn"
+              class="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </button>
+            <button
+              id="view-documents-btn"
+              class="p-2 text-gray-500 hover:text-gray-700 rounded-full hover:bg-gray-100"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                />
+              </svg>
+            </button>
           </div>
           <div class="model-info">
             <span
@@ -153,37 +191,62 @@
           </div>
         </header>
 
-        <div id="chat-history" class="flex-1 overflow-y-auto p-4 space-y-4">
-          <!-- Messages will be loaded dynamically here -->
-        </div>
+        <div class="flex-1 flex overflow-hidden">
+          <!-- Chat area -->
+          <div class="flex-1 flex flex-col overflow-hidden">
+            <div id="chat-history" class="flex-1 overflow-y-auto p-4 space-y-4">
+              <!-- Messages will be loaded dynamically here -->
+            </div>
 
-        <div class="border-t border-slate-200 p-4 bg-white">
-          <div class="flex items-end gap-2">
-            <textarea
-              id="chat-input"
-              rows="1"
-              placeholder="Ask about your code..."
-              class="flex-1 p-3 border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all max-h-32"
-            ></textarea>
-            <button
-              id="send-button"
-              class="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              aria-label="Send message"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
+            <div class="border-t border-slate-200 p-4 bg-white">
+              <div class="flex items-end gap-2">
+                <textarea
+                  id="chat-input"
+                  rows="1"
+                  placeholder="Ask about your code..."
+                  class="flex-1 p-3 border border-slate-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all max-h-32"
+                ></textarea>
+                <button
+                  id="send-button"
+                  class="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Send message"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <div
+                id="conversation-documents"
+                class="mt-3 text-xs text-slate-500"
               >
-                <path
-                  d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"
-                />
-              </svg>
-            </button>
+                <!-- Documents associated with the conversation will be shown here -->
+              </div>
+            </div>
           </div>
-          <div id="conversation-documents" class="mt-3 text-xs text-slate-500">
-            <!-- Documents associated with the conversation will be shown here -->
+
+          <!-- Documents panel -->
+          <div
+            id="documents-panel"
+            class="w-96 border-l border-slate-200 bg-white hidden"
+          >
+            <div class="h-full flex flex-col">
+              <div class="p-4 border-b border-slate-200">
+                <h2 class="text-lg font-semibold">Documents</h2>
+              </div>
+              <div class="flex-1 overflow-y-auto p-4">
+                <div id="documents-list" class="space-y-4">
+                  <!-- Documents will be loaded here -->
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -235,43 +298,165 @@
     <!-- Document template -->
     <template id="document-template">
       <div
-        class="document-item flex items-center p-1 text-xs text-slate-600 bg-slate-100 rounded mr-2 mb-1 inline-flex group"
+        class="document-item bg-white rounded-lg border border-slate-200 overflow-hidden"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-3 w-3 mr-1"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-          />
-        </svg>
-        <span class="document-name"></span>
-        <button
-          class="delete-document text-slate-400 opacity-0 group-hover:opacity-100 hover:text-red-500 ml-1 p-0.5 rounded-full hover:bg-red-50 transition-all"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-3 w-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        </button>
+        <div class="p-4">
+          <div class="flex items-start justify-between">
+            <div class="flex-1">
+              <h3
+                class="document-name font-medium text-slate-900 truncate"
+              ></h3>
+              <p class="text-sm text-slate-500 mt-1 document-info"></p>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button
+                class="view-document-btn p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="view-analysis-btn p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  />
+                </svg>
+              </button>
+              <button
+                class="delete-document text-slate-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </template>
+
+    <!-- Document content modal -->
+    <div
+      id="document-content-modal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50"
+    >
+      <div
+        class="bg-white rounded-lg w-3/4 max-w-4xl max-h-[80vh] flex flex-col"
+      >
+        <div
+          class="p-4 border-b border-slate-200 flex justify-between items-center"
+        >
+          <h2 id="document-content-title" class="text-lg font-semibold">
+            Document Content
+          </h2>
+          <button
+            id="close-document-content"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <pre
+            id="document-content"
+            class="whitespace-pre-wrap font-mono text-sm"
+          ></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document analysis modal -->
+    <div
+      id="document-analysis-modal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50"
+    >
+      <div
+        class="bg-white rounded-lg w-3/4 max-w-4xl max-h-[80vh] flex flex-col"
+      >
+        <div
+          class="p-4 border-b border-slate-200 flex justify-between items-center"
+        >
+          <h2 id="document-analysis-title" class="text-lg font-semibold">
+            Document Analysis
+          </h2>
+          <button
+            id="close-document-analysis"
+            class="text-slate-400 hover:text-slate-600"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4">
+          <div id="document-analysis" class="prose max-w-none"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Edit title modal -->
     <div
@@ -300,6 +485,42 @@
           >
             Save
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add this after the edit title modal -->
+    <div
+      id="index-modal"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden"
+    >
+      <div
+        class="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto"
+      >
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-semibold">Project Index</h2>
+          <button
+            id="close-index-modal"
+            class="text-gray-500 hover:text-gray-700"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div id="index-content" class="prose max-w-none">
+          <!-- Index content will be loaded here -->
         </div>
       </div>
     </div>
@@ -373,6 +594,8 @@
       <!-- Toast content will be added dynamically -->
     </div>
 
+    <!-- Add this before the closing </body> tag -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="script.js"></script>
 
     <script>

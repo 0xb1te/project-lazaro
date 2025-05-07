@@ -22,7 +22,8 @@ class Config:
         # Vector database configuration
         self.QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
         self.QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
-        self.COLLECTION_NAME = os.getenv("COLLECTION_NAME", "documents")
+        self.BASE_COLLECTION_NAME = os.getenv("BASE_COLLECTION_NAME", "documents")
+        self.USE_PER_CONVERSATION_COLLECTIONS = os.getenv("USE_PER_CONVERSATION_COLLECTIONS", "True").lower() == "true"
         self.CONVERSATIONS_COLLECTION = os.getenv("CONVERSATIONS_COLLECTION", "conversations")
         self.EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", "384"))
         
@@ -63,7 +64,7 @@ class Config:
             "qdrant": {
                 "host": self.QDRANT_HOST,
                 "port": self.QDRANT_PORT,
-                "collection_name": self.COLLECTION_NAME,
+                "collection_name": self.BASE_COLLECTION_NAME,
                 "conversations_collection": self.CONVERSATIONS_COLLECTION,
                 "embedding_dimension": self.EMBEDDING_DIMENSION
             },

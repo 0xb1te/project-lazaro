@@ -1,10 +1,12 @@
 # src/infrastructure/repository/qdrant_vector_repository.py
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
+import uuid
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams, PointIdsList, Filter, FieldCondition, MatchValue
+from langchain.docstore.document import Document
 
 from backend.domain.port.repository.vector_repository import VectorRepository
 from backend.domain.model.document_chunk import DocumentChunk
@@ -15,25 +17,28 @@ class QdrantVectorRepository(VectorRepository):
     Stores and retrieves document chunks with vector embeddings using Qdrant.
     """
     
-    def __init__(self, host: str, port: int, collection_name: str = "documents", embedding_dimension: int = 384):
+    def __init__(self, host: str, port: int, collection_name: str = "documents", embedding_dimension: int = 384, use_per_conversation_collections: bool = True):
         """
         Initialize the repository with Qdrant connection details.
         
         Args:
             host: Qdrant host address
             port: Qdrant port number
-            collection_name: Name of the collection to use
+            collection_name: Base name for collections
             embedding_dimension: Dimension of the embedding vectors
+            use_per_conversation_collections: Whether to use per-conversation collections
         """
         self.host = host
         self.port = port
-        self.collection_name = collection_name
+        self.base_collection_name = collection_name
         self.embedding_dimension = embedding_dimension
+        self.use_per_conversation_collections = use_per_conversation_collections
         self.client = QdrantClient(host=host, port=port)
         self.logger = logging.getLogger(__name__)
         
-        # Initialize the collection
-        self.initialize_collection(collection_name, embedding_dimension)
+        # Initialize the base collection only if per-conversation collections are disabled
+        if not self.use_per_conversation_collections:
+            self.initialize_collection(collection_name, embedding_dimension)
     
     def initialize_collection(self, collection_name: str, dimension: int = 384) -> None:
         """
@@ -60,61 +65,141 @@ class QdrantVectorRepository(VectorRepository):
         else:
             self.logger.info(f"Collection {collection_name} already exists")
     
-    def add_documents(self, document_chunks: List[DocumentChunk], collection_name: str = None) -> List[str]:
+    def _get_collection_name(self, conversation_id: str = None) -> str:
         """
-        Add document chunks with embeddings to Qdrant.
+        Get the appropriate collection name based on conversation ID.
         
         Args:
-            document_chunks: List of document chunks with embeddings
-            collection_name: Name of the collection (optional, uses default if not specified)
+            conversation_id: Optional conversation ID
             
         Returns:
-            List of IDs of the added documents
+            Collection name to use
         """
-        # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
-        
-        # Prepare points for insertion
-        points = []
-        ids = []
-        
-        for chunk in document_chunks:
-            # Skip chunks without embeddings
-            if chunk.embedding is None:
-                self.logger.warning(f"Skipping chunk with no embedding: {chunk.chunk_id}")
-                continue
+        if not self.use_per_conversation_collections or not conversation_id:
+            return self.base_collection_name
             
-            chunk_id = chunk.chunk_id
-            ids.append(chunk_id)
+        # Format: <uuid>
+        return f"{conversation_id}"
+
+    def create_conversation_collection(self, conversation_id: str) -> str:
+        """
+        Create a new collection for a conversation.
+        
+        Args:
+            conversation_id: ID of the conversation
             
-            points.append(
-                models.PointStruct(
-                    id=chunk_id,
-                    vector=chunk.embedding,
-                    payload={
-                        "text": chunk.content,
-                        "metadata": chunk.metadata
-                    }
+        Returns:
+            Name of the created collection
+        """
+        collection_name = f"{conversation_id}"
+        
+        # Check if collection exists
+        collections = self.client.get_collections().collections
+        exists = any(col.name == collection_name for col in collections)
+        
+        if not exists:
+            # Create new collection
+            self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=self.embedding_dimension,
+                    distance=Distance.COSINE
                 )
             )
+            self.logger.info(f"Created new collection: {collection_name}")
+        else:
+            self.logger.info(f"Collection {collection_name} already exists")
         
-        # Insert points in batches
-        BATCH_SIZE = 100
-        for i in range(0, len(points), BATCH_SIZE):
-            batch = points[i:i + BATCH_SIZE]
-            self.client.upsert(
-                collection_name=collection_name,
-                points=batch
-            )
+        return collection_name
+
+    def list_conversation_collections(self) -> List[str]:
+        """
+        List all collections associated with conversations.
         
-        self.logger.info(f"Added {len(points)} document chunks to collection {collection_name}")
-        return ids
-    
+        Returns:
+            List of collection names
+        """
+        collections = self.client.get_collections().collections
+        prefix = ""
+        return [col.name for col in collections if col.name.startswith(prefix)]
+
+    def delete_conversation_collection(self, conversation_id: str) -> None:
+        """
+        Delete a collection associated with a conversation.
+        
+        Args:
+            conversation_id: ID of the conversation
+        """
+        collection_name = f"{conversation_id}"
+        self.delete_collection(collection_name)
+
+    def add_documents(self, documents: List[Union[Document, DocumentChunk]], conversation_id: Optional[str] = None) -> None:
+        """
+        Add documents to the vector store.
+        
+        Args:
+            documents: List of documents to add
+            conversation_id: Optional conversation ID to use as collection name
+        """
+        if not documents:
+            return
+            
+        try:
+            # Determine collection name
+            collection_name = self._get_collection_name(conversation_id)
+            
+            # Check if collection exists, if not create it
+            try:
+                collection_info = self.client.get_collection(collection_name)
+                self.logger.debug(f"Found existing collection: {collection_name}")
+            except Exception as e:
+                self.logger.info(f"Collection {collection_name} does not exist, creating it...")
+                self.initialize_collection(collection_name)
+            
+            # Convert documents to points
+            points = []
+            for doc in documents:
+                # Skip documents without embeddings (like analysis documents)
+                if not hasattr(doc, 'embedding') or doc.embedding is None:
+                    continue
+                    
+                point = models.PointStruct(
+                    id=doc.chunk_id if isinstance(doc, DocumentChunk) else str(uuid.uuid4()),
+                    vector=doc.embedding,
+                    payload={
+                        'content': doc.content if isinstance(doc, DocumentChunk) else doc.page_content,
+                        'metadata': doc.metadata,
+                        'document_id': doc.document_id if isinstance(doc, DocumentChunk) else doc.metadata.get('document_id', str(uuid.uuid4()))
+                    }
+                )
+                points.append(point)
+            
+            if points:
+                # Batch points in groups of 100 to avoid timeouts
+                batch_size = 100
+                for i in range(0, len(points), batch_size):
+                    batch = points[i:i + batch_size]
+                    self.client.upsert(
+                        collection_name=collection_name,
+                        points=batch,
+                        wait=True
+                    )
+                    self.logger.debug(f"Added batch of {len(batch)} points to collection {collection_name}")
+                
+                self.logger.info(f"Successfully added {len(points)} points to collection {collection_name}")
+            else:
+                self.logger.warning("No points to add: all documents were skipped (no embeddings)")
+                
+        except Exception as e:
+            self.logger.error(f"Error adding documents to vector store: {str(e)}")
+            raise
+
     def search_similar(self, 
                       query_vector: List[float], 
                       limit: int = 200,
                       filter_criteria: Optional[Dict[str, Any]] = None,
-                      collection_name: str = None) -> List[Dict[str, Any]]:
+                      collection_name: str = None,
+                      conversation_id: str = None) -> List[Dict[str, Any]]:
         """
         Search for document chunks similar to a query vector.
         
@@ -122,13 +207,15 @@ class QdrantVectorRepository(VectorRepository):
             query_vector: Vector to search for
             limit: Maximum number of results
             filter_criteria: Optional filter criteria
-            collection_name: Name of the collection (optional, uses default if not specified)
+            collection_name: Name of the collection (optional)
+            conversation_id: ID of the conversation (optional)
             
         Returns:
             List of document chunks with similarity scores
         """
-        # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        # Determine collection name
+        if collection_name is None:
+            collection_name = self._get_collection_name(conversation_id)
         
         # Prepare search filter if provided
         search_filter = None
@@ -159,26 +246,38 @@ class QdrantVectorRepository(VectorRepository):
                 must=filter_conditions
             )
         
-        # Search for similar vectors
-        search_result = self.client.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=limit,
-            query_filter=search_filter
-        )
-        
-        # Format results
-        results = []
-        for scored_point in search_result:
-            results.append({
-                "id": scored_point.id,
-                "text": scored_point.payload["text"],
-                "similarity": scored_point.score,
-                "metadata": scored_point.payload.get("metadata", {})
-            })
-        
-        self.logger.info(f"Found {len(results)} results in collection {collection_name}")
-        return results
+        try:
+            # Search for similar vectors
+            search_result = self.client.search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                query_filter=search_filter
+            )
+            
+            # Format results
+            results = []
+            for scored_point in search_result:
+                # Get text content from the correct field
+                text = scored_point.payload.get("content", "")
+                if not text:
+                    # Fallback to 'text' field for backward compatibility
+                    text = scored_point.payload.get("text", "")
+                
+                results.append({
+                    "id": scored_point.id,
+                    "text": text,
+                    "similarity": scored_point.score,
+                    "metadata": scored_point.payload.get("metadata", {}),
+                    "document_id": scored_point.payload.get("document_id")
+                })
+            
+            self.logger.info(f"Found {len(results)} results in collection {collection_name}")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error searching similar vectors: {str(e)}")
+            raise
     
     def clear_collection(self, collection_name: str = None) -> None:
         """
@@ -188,7 +287,7 @@ class QdrantVectorRepository(VectorRepository):
             collection_name: Name of the collection (optional, uses default if not specified)
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             # Delete the collection
@@ -213,7 +312,7 @@ class QdrantVectorRepository(VectorRepository):
             collection_name: Name of the collection (optional, uses default if not specified)
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             self.client.delete_collection(collection_name=collection_name)
@@ -232,7 +331,7 @@ class QdrantVectorRepository(VectorRepository):
             Dictionary with collection information
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             # Get collection info
@@ -265,7 +364,7 @@ class QdrantVectorRepository(VectorRepository):
             Document data if found, None otherwise
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             # Retrieve points by ID
@@ -303,7 +402,7 @@ class QdrantVectorRepository(VectorRepository):
             Number of documents deleted
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             # Delete points by ID
@@ -336,7 +435,7 @@ class QdrantVectorRepository(VectorRepository):
             List of document chunks matching the criteria
         """
         # Use default collection if not specified
-        collection_name = collection_name or self.collection_name
+        collection_name = collection_name or self.base_collection_name
         
         try:
             # Prepare filter

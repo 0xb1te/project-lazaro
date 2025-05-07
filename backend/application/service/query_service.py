@@ -52,10 +52,18 @@ class QueryService:
         # Step 1: Generate embedding for the query
         query_embedding = self.embedding_service.get_embedding(query_request.query)
         
-        # Step 2: Search for similar documents - note we don't pass collection_name anymore
+        # Step 2: Ensure conversation collection exists if conversation_id is provided
+        if query_request.conversation_id:
+            try:
+                self.vector_repository.create_conversation_collection(query_request.conversation_id)
+            except Exception as e:
+                print(f"Error creating conversation collection: {str(e)}")
+        
+        # Step 3: Search for similar documents
         similar_docs_data = self.vector_repository.search_similar(
             query_vector=query_embedding,
-            limit=query_request.max_results
+            limit=query_request.max_results,
+            conversation_id=query_request.conversation_id
         )
         
         # Convert to DTOs
@@ -69,10 +77,10 @@ class QueryService:
             )
             similar_docs.append(doc_dto)
         
-        # Step 3: Extract context from documents
+        # Step 4: Extract context from documents
         context = self._create_context_from_documents(similar_docs)
         
-        # Step 4: Get conversation history if requested
+        # Step 5: Get conversation history if requested
         conversation_history = None
         if query_request.conversation_id:
             try:
@@ -94,18 +102,15 @@ class QueryService:
                 print(f"Error processing conversation history: {str(e)}")
                 conversation_history = None
         
-        # Step 5: Generate answer using LLM
+        # Step 6: Generate answer using LLM
         answer = self.llm_service.generate_response(
             question=query_request.query,
             context=context,
             conversation_history=conversation_history
         )
         
-        # Step 6: Store in conversation if conversation_id provided
+        # Step 7: Store in conversation if conversation_id provided
         if query_request.conversation_id:
-            # Add user message
-            self.conversation_service.add_user_message(query_request.conversation_id, query_request.query)
-            
             # Add assistant message
             self.conversation_service.add_assistant_message(query_request.conversation_id, answer)
         
