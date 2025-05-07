@@ -286,8 +286,6 @@ class OllamaService(LLMService):
                 - For any suggested changes, explain potential impacts on other parts of the codebase.
                 - Provide fallback mechanisms or error handling for any new features.
 
-                
-
                 Document Context:
                 {context}
 
@@ -303,7 +301,12 @@ class OllamaService(LLMService):
             llm = self._get_ollama_client()
             
             # Get the answer with timeout handling
+            self.logger.debug(f"Sending prompt to Ollama: {prompt_template[:200]}...")
             answer = llm.invoke(prompt_template)
+            self.logger.debug(f"Received raw response from Ollama: {answer}")
+            
+            # Log the final response
+            self.logger.info(f"Final processed response: {answer[:200]}...")
             
             return answer
             
@@ -323,6 +326,7 @@ class OllamaService(LLMService):
                         
                         # Retry
                         answer = llm.invoke(prompt_template)
+                        self.logger.debug(f"Retry response from Ollama: {answer}")
                         return answer
                     except Exception as retry_error:
                         self.logger.error(f"Error in retry after model pull: {str(retry_error)}")

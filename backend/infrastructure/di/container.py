@@ -78,7 +78,8 @@ class Container:
         """Get the document processor service instance."""
         if "document_processor" not in self._instances:
             self._instances["document_processor"] = DocumentProcessor(
-                upload_folder=self.config.UPLOAD_FOLDER
+                upload_folder=self.config.UPLOAD_FOLDER,
+                storage_dir=self.config.STORAGE_DIR
             )
         return self._instances["document_processor"]
     

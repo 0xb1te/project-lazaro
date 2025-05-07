@@ -36,7 +36,12 @@ class FileConversationRepository(ConversationRepository):
         Returns:
             The saved conversation data
         """
-        file_path = os.path.join(self.conversations_dir, f"{conversation_id}.json")
+        # Create conversation directory
+        conversation_dir = os.path.join(self.conversations_dir, conversation_id)
+        os.makedirs(conversation_dir, exist_ok=True)
+        
+        # Save conversation data in the conversation directory
+        file_path = os.path.join(conversation_dir, "conversation.json")
         
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(conversation_data, f, indent=2, ensure_ascii=False)
@@ -53,7 +58,7 @@ class FileConversationRepository(ConversationRepository):
         Returns:
             The conversation data if found, None otherwise
         """
-        file_path = os.path.join(self.conversations_dir, f"{conversation_id}.json")
+        file_path = os.path.join(self.conversations_dir, conversation_id, "conversation.json")
         
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -70,16 +75,21 @@ class FileConversationRepository(ConversationRepository):
         """
         conversations = []
         
-        for filename in os.listdir(self.conversations_dir):
-            if filename.endswith('.json'):
-                file_path = os.path.join(self.conversations_dir, filename)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        conversation = json.load(f)
-                        conversations.append(conversation)
-                except (json.JSONDecodeError, IOError):
-                    # Skip files with errors
-                    continue
+        for dirname in os.listdir(self.conversations_dir):
+            # Skip files, only process directories
+            dir_path = os.path.join(self.conversations_dir, dirname)
+            if not os.path.isdir(dir_path):
+                continue
+                
+            # Try to read conversation.json from the directory
+            file_path = os.path.join(dir_path, "conversation.json")
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    conversation = json.load(f)
+                    conversations.append(conversation)
+            except (json.JSONDecodeError, IOError):
+                # Skip files with errors
+                continue
         
         # Sort by updated_at (newest first)
         conversations.sort(key=lambda x: x.get('updated_at', ''), reverse=True)
@@ -95,12 +105,9 @@ class FileConversationRepository(ConversationRepository):
         Returns:
             True if the conversation was deleted, False otherwise
         """
-        file_path = os.path.join(self.conversations_dir, f"{conversation_id}.json")
+        conversation_dir = os.path.join(self.conversations_dir, conversation_id)
         
         try:
-            # Delete the conversation file
-            os.remove(file_path)
-            
             # Delete the associated vector collection
             try:
                 from backend.infrastructure.di.container import Container
@@ -110,13 +117,18 @@ class FileConversationRepository(ConversationRepository):
                 config = Config()
                 container = Container(config)
                 vector_repository = container.get_vector_repository()
+                document_processor = container.get_document_processor()
                 
                 # Delete the conversation collection
                 vector_repository.delete_collection(conversation_id)
                 print(f"Deleted vector collection: {conversation_id}")
+                
+                # Delete all conversation files and folders
+                document_processor.delete_conversation(conversation_id)
+                print(f"Deleted conversation directory: {conversation_id}")
             except Exception as e:
-                print(f"Error deleting vector collection: {str(e)}")
-                # Continue even if collection deletion fails
+                print(f"Error during cleanup: {str(e)}")
+                # Continue even if cleanup fails
             
             return True
         except FileNotFoundError:

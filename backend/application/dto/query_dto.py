@@ -28,30 +28,22 @@ class RetrievedChunkDTO:
 
 @dataclass
 class QueryResponseDTO:
-    """
-    Data Transfer Object for a query response to the client.
-    """
-    response: str
+    """Data Transfer Object for a query response."""
     query: str
+    response: str
     conversation_id: Optional[str] = None
-    retrieved_chunks: List[RetrievedChunkDTO] = field(default_factory=list)
+    context: Optional[str] = None
+    chunks: Optional[List[Dict[str, Any]]] = None
     timestamp: datetime = field(default_factory=datetime.utcnow)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
-            "response": self.response,
             "query": self.query,
+            "response": self.response,
             "conversation_id": self.conversation_id,
-            "retrieved_chunks": [
-                {
-                    "chunk_id": chunk.chunk_id,
-                    "document_id": chunk.document_id,
-                    "content": chunk.content,
-                    "metadata": chunk.metadata,
-                    "score": chunk.score
-                } for chunk in self.retrieved_chunks
-            ],
+            "context": self.context if self.context else None,
+            "chunks": self.chunks if self.chunks else None,
             "timestamp": self.timestamp.isoformat()
         }
     
@@ -82,7 +74,8 @@ class QueryResponseDTO:
             response=data.get("response", ""),
             query=data.get("query", ""),
             conversation_id=data.get("conversation_id"),
-            retrieved_chunks=retrieved_chunks,
+            context=data.get("context"),
+            chunks=[chunk.to_dict() for chunk in retrieved_chunks],
             timestamp=timestamp
         )
 

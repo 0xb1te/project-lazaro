@@ -378,6 +378,9 @@ class DocumentService:
                 # Generate and add index document
                 if file_analyses:
                     try:
+                        # Get project name from the zip file or first directory
+                        project_name = os.path.splitext(os.path.basename(zip_path))[0]
+                        
                         # Generate index content
                         index_content = self.file_analysis_service.create_index_document(list(file_analyses.values()))
                         
@@ -389,25 +392,64 @@ class DocumentService:
                         with open(index_path, 'w', encoding='utf-8') as f:
                             f.write(index_content)
                         
-                        # Create index document for vector store
-                        index_doc = Document(
-                            page_content=index_content,
-                            metadata={
-                                "type": "index",
-                                "compressed": True,
-                                "conversation_id": conversation_id,
-                                "total_files": len(file_analyses),
-                                "processed_files": processed_files,
-                                "skipped_files": skipped_files,
-                                "storage_path": index_path,
-                                "id": str(uuid.uuid4()),
-                                "filename": "index.md"
-                            }
+                        # Create specialized text splitter for index document
+                        index_splitter = CharacterTextSplitter(
+                            chunk_size=500,  # Smaller chunks for index
+                            chunk_overlap=200,  # 40% overlap
+                            separator="\n## ",  # Preserve section boundaries
+                            keep_separator=True
                         )
-                        chunks.append(index_doc)
-                        logger.info(f"Saved index document to {index_path}")
+                        
+                        # Split index content into chunks
+                        index_chunks = index_splitter.split_text(index_content)
+                        
+                        # Get all filenames that were analyzed
+                        indexed_files = [analysis.file_path for analysis in file_analyses.values()]
+                        
+                        # Create index document chunks
+                        index_doc_chunks = []
+                        for i, chunk in enumerate(index_chunks):
+                            # Determine section type based on content
+                            section_type = "overview"
+                            if "# File Catalog" in chunk:
+                                section_type = "catalog"
+                            elif "# Dependency Map" in chunk or "# Architecture Overview" in chunk:
+                                section_type = "dependency"
+                            elif "# File Summaries" in chunk:
+                                section_type = "file_summary"
+                            
+                            # Get relevant files for this chunk
+                            chunk_files = [f for f in indexed_files if f in chunk]
+                            
+                            # Create document chunk with enhanced metadata
+                            chunk_doc = Document(
+                                page_content=chunk,
+                                metadata={
+                                    "document_type": "index",
+                                    "is_index": True,
+                                    "indexed_files": indexed_files,
+                                    "project_name": project_name,
+                                    "creation_timestamp": datetime.utcnow().isoformat(),
+                                    "file_count": len(indexed_files),
+                                    "retrieval_priority": "high",
+                                    "section_type": section_type,
+                                    "chunk_files": chunk_files,
+                                    "chunk_number": i,
+                                    "total_chunks": len(index_chunks),
+                                    "conversation_id": conversation_id,
+                                    "source": index_path,
+                                    "filename": "index.md"
+                                }
+                            )
+                            index_doc_chunks.append(chunk_doc)
+                        
+                        # Add index chunks to the list of all chunks
+                        chunks.extend(index_doc_chunks)
+                        logger.info(f"Created index document with {len(index_doc_chunks)} chunks")
+                        
                     except Exception as e:
                         logger.warning(f"Error generating index document: {str(e)}")
+                        raise
         
         except Exception as e:
             logger.error(f"Error processing zip file: {str(e)}")
@@ -498,3 +540,37 @@ class DocumentService:
             chunks.append(chunk)
         
         return chunks
+
+    def process_document(self, file_path: str, file_name: str, metadata: Dict[str, Any] = None) -> Document:
+        """
+        Process a document and store it in the vector database.
+        
+        Args:
+            file_path: Path to the file
+            file_name: Name of the file
+            metadata: Additional metadata for the document
+            
+        Returns:
+            The processed Document
+        """
+        try:
+            start_time = time.time()
+            
+            # Process the file
+            document = self.document_processor.process_file(file_path, file_name, metadata)
+            
+            # Generate embeddings for the document
+            document_embedding = self.embedding_service.generate_embedding(document.content)
+            
+            # Store in vector database
+            self.vector_repository.store_document(document, document_embedding)
+            
+            # Log processing time
+            processing_time = time.time() - start_time
+            print(f"Document processed in {processing_time:.2f} seconds")
+            
+            return document
+            
+        except Exception as e:
+            print(f"Error processing document: {str(e)}")
+            raise

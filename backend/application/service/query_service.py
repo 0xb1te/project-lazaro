@@ -39,106 +39,136 @@ class QueryService:
     
     def process_query(self, query_request: QueryRequestDTO) -> QueryResponseDTO:
         """
-        Process a query and return a structured response.
+        Process a query and generate a response.
         
         Args:
-            query_request: The query request DTO
+            query_request: The query request containing the question and parameters
             
         Returns:
-            Query response DTO with answer and related documents
+            QueryResponseDTO containing the response and relevant context
         """
-        start_time = time.time()
-        
-        # Step 1: Generate embedding for the query
-        query_embedding = self.embedding_service.get_embedding(query_request.query)
-        
-        # Step 2: Ensure conversation collection exists if conversation_id is provided
-        if query_request.conversation_id:
+        try:
+            # Ensure collection exists if conversation_id is provided
+            if query_request.conversation_id:
+                try:
+                    # This will create the collection if it doesn't exist
+                    self.vector_repository.create_conversation_collection(query_request.conversation_id)
+                except Exception as e:
+                    print(f"Warning: Error ensuring collection exists: {str(e)}")
+            
+            # Generate embedding for the query
+            query_embedding = self.embedding_service.get_embedding(query_request.query)
+            
+            # First stage: Search for relevant index chunks
             try:
-                self.vector_repository.create_conversation_collection(query_request.conversation_id)
-            except Exception as e:
-                print(f"Error creating conversation collection: {str(e)}")
-        
-        # Step 3: Search for similar documents
-        similar_docs_data = self.vector_repository.search_similar(
-            query_vector=query_embedding,
-            limit=query_request.max_results,
-            conversation_id=query_request.conversation_id
-        )
-        
-        # Convert to DTOs
-        similar_docs = []
-        for doc_data in similar_docs_data:
-            doc_dto = DocumentChunkDTO(
-                id=doc_data["id"],
-                text=doc_data["text"],
-                similarity=doc_data["similarity"],
-                metadata=doc_data["metadata"]
-            )
-            similar_docs.append(doc_dto)
-        
-        # Step 4: Extract context from documents
-        context = self._create_context_from_documents(similar_docs)
-        
-        # Step 5: Get conversation history if requested
-        conversation_history = None
-        if query_request.conversation_id:
-            try:
-                # Get recent messages
-                message_objects = self.conversation_service.get_conversation_history(
-                    conversation_id=query_request.conversation_id,
-                    max_messages=10  # Limit to recent messages to avoid context overload
+                index_chunks = self.vector_repository.search_similar(
+                    query_vector=query_embedding,
+                    limit=query_request.max_results,
+                    filter_criteria={
+                        "document_type": "index",
+                        "conversation_id": query_request.conversation_id
+                    },
+                    collection_name=query_request.conversation_id
                 )
-                
-                if message_objects and len(message_objects) > 0:
-                    # Convert to format expected by LLM service
-                    conversation_history = []
-                    for msg in message_objects:
-                        conversation_history.append({
-                            "role": msg.role,
-                            "content": msg.content
-                        })
             except Exception as e:
-                print(f"Error processing conversation history: {str(e)}")
-                conversation_history = None
-        
-        # Step 6: Generate answer using LLM
-        answer = self.llm_service.generate_response(
-            question=query_request.query,
-            context=context,
-            conversation_history=conversation_history
-        )
-        
-        # Step 7: Store in conversation if conversation_id provided
-        if query_request.conversation_id:
-            # Add assistant message
-            self.conversation_service.add_assistant_message(query_request.conversation_id, answer)
-        
-        # Calculate processing time
-        processing_time_ms = (time.time() - start_time) * 1000
-        
-        # Convert DocumentChunkDTO to RetrievedChunkDTO for the response
-        retrieved_chunks = []
-        for doc in similar_docs:
-            retrieved_chunk = RetrievedChunkDTO(
-                chunk_id=doc.id or str(uuid.uuid4()),
-                document_id=doc.metadata.get("document_id", "unknown"),
-                content=doc.text,
-                metadata=doc.metadata,
-                score=doc.similarity
+                print(f"Warning: Error searching index chunks: {str(e)}")
+                index_chunks = []
+            
+            # Extract relevant file references from index chunks
+            relevant_files = set()
+            for chunk in index_chunks:
+                if chunk.get("metadata", {}).get("chunk_files"):
+                    relevant_files.update(chunk["metadata"]["chunk_files"])
+            
+            # Second stage: Search for specific code chunks
+            code_chunks = []
+            if relevant_files:
+                try:
+                    # Search only in the relevant files
+                    code_chunks = self.vector_repository.search_similar(
+                        query_vector=query_embedding,
+                        limit=query_request.max_results,
+                        filter_criteria={
+                            "filename": {"$in": list(relevant_files)},
+                            "document_type": {"$ne": "index"},
+                            "conversation_id": query_request.conversation_id
+                        },
+                        collection_name=query_request.conversation_id
+                    )
+                except Exception as e:
+                    print(f"Warning: Error searching code chunks: {str(e)}")
+            
+            # If no index chunks were found, try a general search
+            if not index_chunks and not code_chunks:
+                try:
+                    general_chunks = self.vector_repository.search_similar(
+                        query_vector=query_embedding,
+                        limit=query_request.max_results,
+                        filter_criteria={
+                            "conversation_id": query_request.conversation_id
+                        },
+                        collection_name=query_request.conversation_id
+                    )
+                    code_chunks.extend(general_chunks)
+                except Exception as e:
+                    print(f"Warning: Error performing general search: {str(e)}")
+            
+            # Combine and sort results
+            all_chunks = []
+            
+            # Add index chunks with boosted scores
+            for chunk in index_chunks:
+                chunk["similarity"] *= 1.2  # Boost index relevance by 20%
+                all_chunks.append(chunk)
+            
+            # Add code chunks
+            all_chunks.extend(code_chunks)
+            
+            # Sort by similarity score
+            all_chunks.sort(key=lambda x: x["similarity"], reverse=True)
+            
+            # Limit to max_results
+            all_chunks = all_chunks[:query_request.max_results]
+            
+            # Prepare context for LLM
+            context_parts = []
+            
+            # Add index context first
+            index_context = [chunk for chunk in all_chunks if chunk["metadata"].get("document_type") == "index"]
+            if index_context:
+                context_parts.append("\nProject Context:")
+                for chunk in index_context:
+                    context_parts.append(f"\n{chunk['text']}")
+            
+            # Add code context
+            code_context = [chunk for chunk in all_chunks if chunk["metadata"].get("document_type") != "index"]
+            if code_context:
+                context_parts.append("\nRelevant Code:")
+                for chunk in code_context:
+                    filename = chunk["metadata"].get("filename", "unknown")
+                    context_parts.append(f"\nFrom {filename}:\n{chunk['text']}")
+            
+            # Combine context
+            context = "\n".join(context_parts) if context_parts else "No relevant context found."
+            
+            # Generate response using LLM
+            response = self.llm_service.generate_response(
+                question=query_request.query,
+                context=context,
+                temperature=query_request.temperature
             )
-            retrieved_chunks.append(retrieved_chunk)
-        
-        # Build response
-        response = QueryResponseDTO(
-            query=query_request.query,
-            response=answer,
-            conversation_id=query_request.conversation_id,
-            retrieved_chunks=retrieved_chunks,
-            timestamp=datetime.utcnow()
-        )
-        
-        return response
+            
+            # Create response DTO
+            return QueryResponseDTO(
+                query=query_request.query,
+                response=response,
+                context=context if query_request.include_context else None,
+                chunks=all_chunks if query_request.include_context else None,
+                conversation_id=query_request.conversation_id
+            )
+            
+        except Exception as e:
+            raise Exception(f"Error processing query: {str(e)}")
     
     def ask_question(self, query_request: QueryRequestDTO) -> QueryResponseDTO:
         """
