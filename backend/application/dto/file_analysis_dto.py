@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 @dataclass
@@ -41,6 +41,20 @@ class FileAnalysis:
             'metrics': self.metrics.to_dict(),
             'timestamp': self.timestamp.isoformat()
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'FileAnalysis':
+        """Create FileAnalysis from dictionary."""
+        metrics = CodeMetrics(**data["metrics"])
+        return cls(
+            file_path=data["file_path"],
+            summary=data["summary"],
+            relationships=data["relationships"],
+            hierarchy=data["hierarchy"],
+            swot=data["swot"],
+            metrics=metrics,
+            timestamp=datetime.fromisoformat(data["timestamp"])
+        )
 
 @dataclass
 class FileAnalysisRequestDTO:

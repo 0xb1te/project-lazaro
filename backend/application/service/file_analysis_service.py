@@ -826,15 +826,23 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
 
     def _generate_metrics_summary(self, analyses: List[FileAnalysis]) -> str:
         """Generate a summary of code metrics."""
+        if not analyses:
+            return """### Overall Metrics
+- No files analyzed
+- No metrics available"""
+
         total_loc = sum(a.metrics.lines_of_code for a in analyses)
         total_comments = sum(a.metrics.comment_lines for a in analyses)
         avg_complexity = sum(a.metrics.complexity for a in analyses) / len(analyses)
         avg_maintainability = sum(a.metrics.maintainability_index for a in analyses) / len(analyses)
         
+        # Avoid division by zero for comment ratio
+        comment_ratio = (total_comments/total_loc)*100 if total_loc > 0 else 0
+        
         return f"""### Overall Metrics
 - Total Lines of Code: {total_loc:,}
 - Total Comment Lines: {total_comments:,}
-- Comment Ratio: {(total_comments/total_loc)*100:.1f}%
+- Comment Ratio: {comment_ratio:.1f}%
 - Average Complexity: {avg_complexity:.1f}
 - Average Maintainability Index: {avg_maintainability:.1f}/100
 
@@ -1299,4 +1307,58 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
             
         except Exception as e:
             self.logger.error(f"Error formatting relationships: {str(e)}")
-            return "Error formatting relationships" 
+            return "Error formatting relationships"
+
+    def _extract_technologies(self, analyses: List[FileAnalysis]) -> str:
+        """Extract technology stack information from analyses."""
+        try:
+            # Initialize technology categories
+            technologies = {
+                'languages': set(),
+                'frameworks': set(),
+                'libraries': set(),
+                'tools': set()
+            }
+            
+            # Extract from file extensions and dependencies
+            for analysis in analyses:
+                # Get file extension
+                ext = os.path.splitext(analysis.file_path)[1].lower()
+                if ext:
+                    if ext in ['.py']:
+                        technologies['languages'].add('Python')
+                    elif ext in ['.js', '.jsx']:
+                        technologies['languages'].add('JavaScript')
+                    elif ext in ['.ts', '.tsx']:
+                        technologies['languages'].add('TypeScript')
+                    elif ext in ['.html']:
+                        technologies['languages'].add('HTML')
+                    elif ext in ['.css', '.scss', '.sass']:
+                        technologies['languages'].add('CSS')
+                
+                # Extract from dependencies
+                for dep in analysis.hierarchy.get('dependencies', []):
+                    if isinstance(dep, str):
+                        # Common frameworks
+                        if any(fw in dep.lower() for fw in ['react', 'vue', 'angular', 'django', 'flask']):
+                            technologies['frameworks'].add(dep)
+                        # Common libraries
+                        elif any(lib in dep.lower() for lib in ['numpy', 'pandas', 'requests', 'axios']):
+                            technologies['libraries'].add(dep)
+                        # Common tools
+                        elif any(tool in dep.lower() for tool in ['webpack', 'babel', 'jest', 'pytest']):
+                            technologies['tools'].add(dep)
+            
+            # Format output
+            sections = []
+            for category, items in technologies.items():
+                if items:
+                    sections.append(f"### {category.title()}")
+                    sections.extend([f"- {item}" for item in sorted(items)])
+                    sections.append("")  # Empty line between sections
+            
+            return "\n".join(sections) if sections else "No specific technologies identified"
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting technologies: {str(e)}")
+            return "Error extracting technology information" 

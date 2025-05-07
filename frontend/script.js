@@ -271,9 +271,37 @@ function setupEventListeners() {
   });
 
   // Documents panel toggle
-  viewDocumentsBtn.addEventListener("click", () => {
+  viewDocumentsBtn.addEventListener("click", async () => {
+    const isHidden = documentsPanel.classList.contains("hidden");
     documentsPanel.classList.toggle("hidden");
+
+    if (isHidden && activeConversationId) {
+      // Load and display documents when panel is opened
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/conversations/${activeConversationId}`
+        );
+        if (!response.ok) {
+          throw new Error("Failed to load conversation");
+        }
+        const conversation = await response.json();
+        if (conversation && conversation.documents) {
+          renderConversationDocuments(conversation.documents);
+        }
+      } catch (error) {
+        console.error("Error loading documents:", error);
+        showToast(`Error loading documents: ${error.message}`, "error");
+      }
+    }
   });
+
+  // Close documents panel
+  const closeDocumentsPanel = document.getElementById("close-documents-panel");
+  if (closeDocumentsPanel) {
+    closeDocumentsPanel.addEventListener("click", () => {
+      documentsPanel.classList.add("hidden");
+    });
+  }
 
   // Document content modal
   closeDocumentContent.addEventListener("click", () => {
@@ -1449,6 +1477,11 @@ async function showIndexModal() {
     // Display the content
     indexContent.innerHTML = content;
 
+    // Initialize Mermaid diagrams if present
+    if (window.mermaid) {
+      window.mermaid.init(undefined, document.querySelectorAll(".mermaid"));
+    }
+
     // Show the modal
     indexModal.classList.remove("hidden");
   } catch (error) {
@@ -1476,11 +1509,16 @@ async function showDocumentContent(doc) {
     const data = await response.json();
 
     documentContentTitle.textContent = doc.filename;
-    documentContent.textContent = data.content;
 
-    // Apply syntax highlighting if it's a code file
-    if (doc.file_type && doc.file_type.match(/\.(js|py|html|css|json)$/)) {
-      hljs.highlightElement(documentContent);
+    // Handle index.md specially
+    if (doc.filename === "index.md") {
+      documentContent.innerHTML = marked.parse(data.content);
+    } else {
+      documentContent.textContent = data.content;
+      // Apply syntax highlighting if it's a code file
+      if (doc.file_type && doc.file_type.match(/\.(js|py|html|css|json)$/)) {
+        hljs.highlightElement(documentContent);
+      }
     }
 
     documentContentModal.classList.remove("hidden");
@@ -1503,8 +1541,104 @@ async function showDocumentAnalysis(doc) {
     const data = await response.json();
 
     documentAnalysisTitle.textContent = `Analysis: ${doc.filename}`;
-    documentAnalysis.innerHTML = marked.parse(data.content);
 
+    // Convert the analysis to markdown
+    let analysisContent = "## Document Analysis\n\n";
+
+    // Add hierarchy if available
+    if (data.hierarchy) {
+      analysisContent += "### Hierarchy\n\n";
+      if (data.hierarchy.layer) {
+        analysisContent += `- **Layer:** ${data.hierarchy.layer}\n`;
+      }
+      if (data.hierarchy.parents && data.hierarchy.parents.length > 0) {
+        analysisContent += `- **Parents:** ${data.hierarchy.parents.join(
+          ", "
+        )}\n`;
+      }
+      if (data.hierarchy.children && data.hierarchy.children.length > 0) {
+        analysisContent += `- **Children:** ${data.hierarchy.children.join(
+          ", "
+        )}\n`;
+      }
+      if (
+        data.hierarchy.dependencies &&
+        data.hierarchy.dependencies.length > 0
+      ) {
+        analysisContent += `- **Dependencies:** ${data.hierarchy.dependencies.join(
+          ", "
+        )}\n`;
+      }
+      analysisContent += "\n";
+    }
+
+    // Add summary if available
+    if (data.summary) {
+      analysisContent += "### Summary\n\n";
+      if (data.summary.purpose) {
+        analysisContent += `**Purpose:** ${data.summary.purpose}\n\n`;
+      }
+      if (data.summary.components && data.summary.components.length > 0) {
+        analysisContent += "**Components:**\n";
+        data.summary.components.forEach((comp) => {
+          analysisContent += `- ${comp}\n`;
+        });
+        analysisContent += "\n";
+      }
+      if (data.summary.patterns && data.summary.patterns.length > 0) {
+        analysisContent += "**Patterns:**\n";
+        data.summary.patterns.forEach((pattern) => {
+          analysisContent += `- ${pattern}\n`;
+        });
+        analysisContent += "\n";
+      }
+    }
+
+    // Add SWOT analysis if available
+    if (data.swot) {
+      analysisContent += "### SWOT Analysis\n\n";
+      if (data.swot.strengths && data.swot.strengths.length > 0) {
+        analysisContent += "**Strengths:**\n";
+        data.swot.strengths.forEach((s) => {
+          analysisContent += `- ${s}\n`;
+        });
+        analysisContent += "\n";
+      }
+      if (data.swot.weaknesses && data.swot.weaknesses.length > 0) {
+        analysisContent += "**Weaknesses:**\n";
+        data.swot.weaknesses.forEach((w) => {
+          analysisContent += `- ${w}\n`;
+        });
+        analysisContent += "\n";
+      }
+      if (data.swot.opportunities && data.swot.opportunities.length > 0) {
+        analysisContent += "**Opportunities:**\n";
+        data.swot.opportunities.forEach((o) => {
+          analysisContent += `- ${o}\n`;
+        });
+        analysisContent += "\n";
+      }
+      if (data.swot.threats && data.swot.threats.length > 0) {
+        analysisContent += "**Threats:**\n";
+        data.swot.threats.forEach((t) => {
+          analysisContent += `- ${t}\n`;
+        });
+        analysisContent += "\n";
+      }
+    }
+
+    // Add relationships if available
+    if (data.relationships && data.relationships.length > 0) {
+      analysisContent += "### Relationships\n\n";
+      data.relationships.forEach((rel) => {
+        analysisContent += `- **${rel.type}:** ${rel.name}\n`;
+        if (rel.description) {
+          analysisContent += `  - ${rel.description}\n`;
+        }
+      });
+    }
+
+    documentAnalysis.innerHTML = marked.parse(analysisContent);
     documentAnalysisModal.classList.remove("hidden");
   } catch (error) {
     console.error("Error loading document analysis:", error);
