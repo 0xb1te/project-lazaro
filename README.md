@@ -1,128 +1,173 @@
-# Code Query Application
+# Project Lazaro - RAG System with Hexagonal Architecture
 
-This application allows users to drag and drop project files, index them in a Qdrant database, and ask questions about the code using Ollama's local LLM. Built with Flask, Qdrant, and Ollama.
+Project Lazaro is a modular Retrieval-Augmented Generation (RAG) system built with a clean hexagonal architecture (ports and adapters pattern). The system allows users to upload documents, ask questions about their content, and maintain conversations in a clean, maintainable, and testable codebase.
 
-## Features
+## Architecture Overview
 
-- 📁 Drag and drop file upload support
-- 🔍 Advanced code search using vector embeddings
-- 💡 Intelligent code analysis with local LLM
-- 🚀 Fast response times using Qdrant vector database
-- 🐳 Docker support for easy deployment
+The system follows a strict hexagonal architecture with the following layers:
 
-## Prerequisites
+### Domain Layer
+
+- **Core entities**: Conversation, Message, Document, DocumentChunk
+- **Ports**: Interfaces for repositories and services that the domain depends on
+- **Domain services**: Core business logic and rules
+
+### Application Layer
+
+- **Application services**: Orchestrate use cases by coordinating domain entities
+- **DTOs**: Data Transfer Objects for input/output operations
+- **Use cases**: Implementations of user interactions with the system
+
+### Infrastructure Layer
+
+- **Repository adapters**: Implementations of repository interfaces (File, Qdrant)
+- **Service adapters**: Implementations of service interfaces (Ollama, SentenceTransformer)
+- **Dependency injection**: Container to wire up dependencies
+- **Configuration**: Environment-based configuration
+
+### Interface Layer
+
+- **API controllers**: Flask-based HTTP interface
+- **API DTOs**: Data objects specific to the API interface
+- **Error handling**: HTTP-specific error handling and formatting
+
+## Key Features
+
+- **Clean separation of concerns**: Each layer has clear responsibilities
+- **Dependency inversion**: Domain doesn't depend on infrastructure
+- **Testability**: Components can be tested in isolation
+- **Flexibility**: Easy to swap out implementations (e.g., different vector stores)
+- **Type safety**: Strong typing throughout the codebase
+
+## Directory Structure
+
+```
+/src
+  /domain
+    /model        # Core entities
+    /port         # Interfaces/ports
+    /service      # Domain services
+  /application
+    /dto          # Data transfer objects
+    /service      # Application services
+  /infrastructure
+    /repository   # Repository implementations
+    /service      # External service adapters
+    /config       # Configuration
+    /di           # Dependency injection
+    /api          # API controllers
+  /interface
+    /api          # API controllers
+    /dto          # API-specific DTOs
+```
+
+## Getting Started
+
+### Prerequisites
 
 - Python 3.8+
-- Docker and Docker Compose
-- Ollama installed locally
-- Necessary LLM model downloaded (e.g., `deepseek-coder:6.7b`)
+- Docker and Docker Compose (optional)
+- [Ollama](https://ollama.ai/) for local LLM support
 
-## Quick Start (Recommended)
+### Installation
 
 1. Clone the repository:
 
-   ```bash
-   git clone <your-repo-url>
-   cd code-query-app
+   ```
+   git clone https://github.com/yourusername/project-lazaro.git
+   cd project-lazaro
    ```
 
-2. Set up environment variables:
+2. Create a virtual environment:
 
-   ```bash
-   cp .env.example .env
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   .\venv\Scripts\Activate.ps1 # On Windows
    ```
 
-3. Configure your `.env` file:
+3. Install dependencies:
 
-   ```env
-   QDRANT_HOST=localhost
-   QDRANT_PORT=6333
-   COLLECTION_NAME=ai-rag-project
-   LLM_MODEL=deepseek-coder:6.7b
    ```
-
-4. Run with Docker:
-
-   ```bash
-   docker-compose up --build
-   ```
-
-5. Access the application:
-   - Frontend: http://localhost
-   - Qdrant UI: http://localhost:6334
-   - API: http://localhost:5000
-
-## Manual Setup (Without Docker)
-
-1. Install dependencies:
-
-   ```bash
    pip install -r requirements.txt
    ```
 
-2. Start Ollama and download the model:
-
-   ```bash
-   ollama run deepseek-coder:6.7b
+4. Set up environment variables (optional):
+   Create a `.env` file in the root directory with:
+   ```
+   QDRANT_HOST=localhost
+   QDRANT_PORT=6333
+   LLM_MODEL=llama2
+   OLLAMA_BASE_URL=http://localhost:11434
+   DEBUG_MODE=True
    ```
 
-3. Run the application:
-   ```bash
-   python run.py
-   ```
+### Running the Application
 
-## Project Structure
+#### Development Mode
 
 ```
-code-query-app/
-├── backend/
-│   ├── __init__.py
-│   ├── app.py
-│   ├── config.py
-│   └── utils/
-├── frontend/
-│   ├── index.html
-│   ├── styles.css
-│   └── script.js
-├── nginx/
-│   └── default.conf
-├── Dockerfile.backend
-├── Dockerfile.frontend
-├── docker-compose.yml
-├── requirements.txt
-├── setup.py
-└── run.py
+python -m backend
+python serve_frontend.py
+```
+
+The application will start on http://localhost:5000.
+
+#### Production Mode
+
+```
+DEBUG_MODE=False python -m src.run
+```
+
+#### Docker
+
+```
+docker-compose up -d
 ```
 
 ## API Endpoints
 
-- `POST /upload`: Upload and index files
-- `POST /ask`: Query the codebase
-- `GET /debug/collection`: View indexed documents
+### Health Check
+
+- `GET /`: Get service health and configuration
+
+### Conversations
+
+- `GET /conversations`: Get all conversations
+- `POST /conversations`: Create a new conversation
+- `GET /conversations/{id}`: Get a conversation by ID
+- `PUT /conversations/{id}`: Update a conversation
+- `DELETE /conversations/{id}`: Delete a conversation
+- `POST /conversations/{id}/messages`: Add a message to a conversation
+- `GET /conversations/{id}/documents`: Get documents associated with a conversation
+
+### Documents
+
+- `POST /upload`: Upload and process a document
+
+### Queries
+
+- `POST /ask`: Ask a question about uploaded documents
 
 ## Development
 
-To run in development mode:
+### Adding a New Repository Implementation
 
-1. Start the application with Docker:
+1. Create a new implementation in `src/infrastructure/repository/`
+2. Implement the relevant interface from `src/domain/port/repository/`
+3. Update the dependency injection container in `src/infrastructure/di/container.py`
 
-   ```bash
-   docker-compose up --build
-   ```
+### Adding a New Service Implementation
 
-2. For live development:
-   ```bash
-   # In a new terminal, watch for changes
-   docker-compose logs -f
-   ```
+1. Create a new implementation in `src/infrastructure/service/`
+2. Implement the relevant interface from `src/domain/port/service/`
+3. Update the dependency injection container in `src/infrastructure/di/container.py`
 
-## Acknowledgments
+### Running Tests
 
-This project is inspired by [Eugene Tan's article on Ollama](https://medium.com/@eugenetan_91090/what-is-ollama-dfdaa40cfbca).
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+```
+pytest
+```
 
 ## License
 
