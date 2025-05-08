@@ -59,11 +59,12 @@ class QueryService:
             # Generate embedding for the query
             query_embedding = self.embedding_service.get_embedding(query_request.query)
             
-            # First stage: Search for relevant index chunks
+            # Step 1: First search for index.md content
+            index_chunks = []
             try:
                 index_chunks = self.vector_repository.search_similar(
                     query_vector=query_embedding,
-                    limit=query_request.max_results,
+                    limit=5,  # Get more index chunks for better context
                     filter_criteria={
                         "document_type": "index",
                         "conversation_id": query_request.conversation_id
@@ -72,19 +73,54 @@ class QueryService:
                 )
             except Exception as e:
                 print(f"Warning: Error searching index chunks: {str(e)}")
-                index_chunks = []
             
-            # Extract relevant file references from index chunks
+            # Step 2: First LLM Call - Ask AI to identify relevant files from index content
             relevant_files = set()
-            for chunk in index_chunks:
-                if chunk.get("metadata", {}).get("chunk_files"):
-                    relevant_files.update(chunk["metadata"]["chunk_files"])
+            if index_chunks:
+                # Combine index content for AI analysis
+                index_content = "\n".join([chunk["text"] for chunk in index_chunks])
+                
+                # Create prompt for AI to identify relevant files
+                file_analysis_prompt = f"""You are a code analysis expert. Based on the following project index and the user's question, identify which files are most relevant to answering the question.
+                Consider the file's purpose, content, and relationships to other files.
+                Return ONLY a JSON array of file paths, nothing else.
+
+                User Question: {query_request.query}
+
+                Project Index:
+                {index_content}
+
+                Return format: ["file1.py", "file2.js", etc.]"""
+
+                # Log the file analysis prompt
+                print(f"\n[AI File Analysis Prompt]\n{file_analysis_prompt}\n")
+
+                # Get AI's file recommendations
+                try:
+                    file_recommendations = self.llm_service.generate_response(
+                        prompt=file_analysis_prompt,
+                        temperature=0.1  # Low temperature for more deterministic output
+                    )
+                    
+                    # Log the file recommendations response
+                    print(f"\n[AI File Analysis Response]\n{file_recommendations}\n")
+                    
+                    # Parse the JSON response
+                    import json
+                    try:
+                        recommended_files = json.loads(file_recommendations)
+                        if isinstance(recommended_files, list):
+                            relevant_files.update(recommended_files)
+                            print(f"AI recommended files: {recommended_files}")
+                    except json.JSONDecodeError:
+                        print("Warning: Could not parse AI's file recommendations")
+                except Exception as e:
+                    print(f"Warning: Error getting AI file recommendations: {str(e)}")
             
-            # Second stage: Search for specific code chunks
+            # Step 3: Search for content in the recommended files
             code_chunks = []
             if relevant_files:
                 try:
-                    # Search only in the relevant files
                     code_chunks = self.vector_repository.search_similar(
                         query_vector=query_embedding,
                         limit=query_request.max_results,
@@ -98,8 +134,8 @@ class QueryService:
                 except Exception as e:
                     print(f"Warning: Error searching code chunks: {str(e)}")
             
-            # If no index chunks were found, try a general search
-            if not index_chunks and not code_chunks:
+            # Step 4: If no relevant files found or no code chunks, fall back to general search
+            if not code_chunks:
                 try:
                     general_chunks = self.vector_repository.search_similar(
                         query_vector=query_embedding,
@@ -113,62 +149,52 @@ class QueryService:
                 except Exception as e:
                     print(f"Warning: Error performing general search: {str(e)}")
             
-            # Combine and sort results
-            all_chunks = []
-            
-            # Add index chunks with boosted scores
-            for chunk in index_chunks:
-                chunk["similarity"] *= 1.2  # Boost index relevance by 20%
-                all_chunks.append(chunk)
-            
-            # Add code chunks
-            all_chunks.extend(code_chunks)
-            
-            # Sort by similarity score
-            all_chunks.sort(key=lambda x: x["similarity"], reverse=True)
-            
-            # Limit to max_results
-            all_chunks = all_chunks[:query_request.max_results]
-            
-            # Prepare context for LLM
+            # Step 5: Prepare context for second LLM call
             context_parts = []
             
             # Add index context first
-            index_context = [chunk for chunk in all_chunks if chunk["metadata"].get("document_type") == "index"]
-            if index_context:
+            if index_chunks:
                 context_parts.append("\nProject Context:")
-                for chunk in index_context:
+                for chunk in index_chunks:
                     context_parts.append(f"\n{chunk['text']}")
             
             # Add code context
-            code_context = [chunk for chunk in all_chunks if chunk["metadata"].get("document_type") != "index"]
-            if code_context:
+            if code_chunks:
                 context_parts.append("\nRelevant Code:")
-                for chunk in code_context:
+                for chunk in code_chunks:
                     filename = chunk["metadata"].get("filename", "unknown")
                     context_parts.append(f"\nFrom {filename}:\n{chunk['text']}")
             
             # Combine context
             context = "\n".join(context_parts) if context_parts else "No relevant context found."
             
-            # Generate response using LLM
+            # Log the question and context for the second LLM call
+            print(f"\n[AI Question]\n{query_request.query}\n")
+            print(f"\n[AI Context]\n{context}\n")
+            
+            # Step 6: Second LLM Call - Generate response using the retrieved context
+            # Use question parameter to trigger the default prompt template
             response = self.llm_service.generate_response(
                 question=query_request.query,
-                context=context,
-                temperature=query_request.temperature
+                temperature=query_request.temperature,
+                context=context
             )
+            
+            # Log the final response
+            print(f"\n[AI Response]\n{response}\n")
             
             # Create response DTO
             return QueryResponseDTO(
                 query=query_request.query,
                 response=response,
                 context=context if query_request.include_context else None,
-                chunks=all_chunks if query_request.include_context else None,
+                chunks=code_chunks if query_request.include_context else None,
                 conversation_id=query_request.conversation_id
             )
             
         except Exception as e:
-            raise Exception(f"Error processing query: {str(e)}")
+            print(f"Error processing query: {str(e)}")
+            raise
     
     def ask_question(self, query_request: QueryRequestDTO) -> QueryResponseDTO:
         """

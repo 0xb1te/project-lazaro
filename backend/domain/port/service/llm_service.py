@@ -12,18 +12,20 @@ class LLMService(ABC):
     
     @abstractmethod
     def generate_response(self, 
-                         prompt: str, 
+                         prompt: Optional[str] = None, 
                          temperature: float = 0.7, 
                          max_tokens: Optional[int] = None,
-                         context: Optional[str] = None) -> str:
+                         context: Optional[str] = None,
+                         question: Optional[str] = None) -> str:
         """
-        Generate a text response to a given prompt.
+        Generate a text response to a given prompt or question.
         
         Args:
-            prompt: The prompt to generate a response for
+            prompt: The prompt to generate a response for (if provided, overrides question)
             temperature: Controls randomness in generation (0.0-1.0)
             max_tokens: Maximum number of tokens to generate
             context: Additional context to consider when generating a response
+            question: The question to generate a response for (used if prompt is None)
             
         Returns:
             The generated text response

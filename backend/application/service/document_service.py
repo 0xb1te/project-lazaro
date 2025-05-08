@@ -85,16 +85,16 @@ class DocumentService:
             
             # Handle zip files
             if file_extension == '.zip':
-                chunks = self._process_zip_file(upload_request.file_path, upload_request.conversation_id)
-                if not chunks:
-                    raise DocumentProcessingError("No processable content found in zip file")
-                    
                 # Create conversation if it doesn't exist
                 if not upload_request.conversation_id:
                     conversation = self.conversation_service.create_conversation(
                         title=f"Analysis of {os.path.basename(upload_request.file_path)}"
                     )
                     upload_request.conversation_id = conversation.id
+                
+                chunks = self._process_zip_file(upload_request.file_path, upload_request.conversation_id)
+                if not chunks:
+                    raise DocumentProcessingError("No processable content found in zip file")
                 
                 # Generate embeddings for chunks
                 processed_chunks = []
@@ -310,6 +310,19 @@ class DocumentService:
                                     'size': file_info.file_size
                                 }
                                 processed_files += 1
+                                
+                                # Add document to conversation
+                                self.conversation_service.add_document_to_conversation(
+                                    conversation_id=conversation_id,
+                                    document_info={
+                                        'filename': file_info.filename,
+                                        'file_path': file_info.filename,
+                                        'file_type': ext[1:],  # Remove the dot from extension
+                                        'size': file_info.file_size,
+                                        'compressed': True,
+                                        'original_path': file_info.filename
+                                    }
+                                )
                         except Exception as e:
                             logger.warning(f"Error reading file {file_info.filename}: {str(e)}")
                             skipped_files += 1
@@ -391,6 +404,19 @@ class DocumentService:
                         
                         with open(index_path, 'w', encoding='utf-8') as f:
                             f.write(index_content)
+                        
+                        # Add index document to conversation
+                        self.conversation_service.add_document_to_conversation(
+                            conversation_id=conversation_id,
+                            document_info={
+                                'filename': "index.md",
+                                'file_path': "index.md",
+                                'file_type': "markdown",
+                                'project_name': project_name,
+                                'file_count': len(file_analyses),
+                                'creation_timestamp': datetime.utcnow().isoformat()
+                            }
+                        )
                         
                         # Create specialized text splitter for index document
                         index_splitter = CharacterTextSplitter(

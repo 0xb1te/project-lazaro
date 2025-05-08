@@ -11,7 +11,7 @@ class QueryRequestDTO:
     """
     query: str
     conversation_id: Optional[str] = None
-    max_results: int = 5
+    max_results: int = 150
     temperature: float = 0.7
     include_context: bool = True
 

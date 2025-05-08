@@ -85,7 +85,7 @@ class FileAnalysisService:
             
             # Calculate code metrics
             self.logger.debug("Calculating code metrics...")
-            metrics = self._calculate_code_metrics(request.content)
+            metrics = self._calculate_code_metrics(request.content, request.file_path)
             self.logger.debug(f"Code metrics calculated: LOC={metrics.lines_of_code}, Comments={metrics.comment_lines}, Complexity={metrics.complexity}")
             
             # Parse AST for Python files
@@ -142,8 +142,37 @@ class FileAnalysisService:
             self.logger.error(f"Error analyzing file {request.file_path}: {str(e)}")
             raise Exception(f"Error analyzing file: {str(e)}")
     
-    def _calculate_code_metrics(self, content: str) -> CodeMetrics:
+    def _calculate_code_metrics(self, content: str, file_path: str = "") -> CodeMetrics:
         """Calculate code quality metrics."""
+        # Define files to exclude from maintainability analysis
+        excluded_files = {
+            # Package and dependency files
+            'package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+            'requirements.txt', 'Pipfile', 'Pipfile.lock', 'poetry.lock',
+            # Build and config files
+            'webpack.config.js', 'tsconfig.json', 'babel.config.js',
+            'jest.config.js', '.eslintrc', '.prettierrc', '.gitignore',
+            # Generated files
+            'index.js', 'index.ts', 'index.d.ts', '*.min.js', '*.min.css',
+            # Documentation
+            'README.md', 'CHANGELOG.md', 'LICENSE', '*.md',
+            # Data files
+            '*.json', '*.yaml', '*.yml', '*.xml', '*.csv',
+            # Binary and media
+            '*.png', '*.jpg', '*.gif', '*.ico', '*.svg',
+            # Other
+            '.env', '.env.*', '*.log'
+        }
+        
+        # Check if file should be excluded
+        file_name = os.path.basename(file_path)
+        should_exclude = any(
+            file_name == pattern or 
+            (pattern.startswith('*') and file_name.endswith(pattern[1:])) or
+            (pattern.endswith('*') and file_name.startswith(pattern[:-1]))
+            for pattern in excluded_files
+        )
+        
         lines = content.split('\n')
         
         # Count lines
@@ -157,14 +186,55 @@ class FileAnalysisService:
             if any(keyword in line for keyword in control_flow_keywords):
                 complexity += 1
                 
-        # Calculate maintainability index (simplified)
-        # Based on: MI = 171 - 5.2 * ln(HV) - 0.23 * (G) - 16.2 * ln(LOC)
-        # where HV is Halstead Volume, G is Cyclomatic Complexity, and LOC is Lines of Code
+        # If file is excluded, return default maintainability score
+        if should_exclude:
+            return CodeMetrics(
+                lines_of_code=total_lines,
+                comment_lines=comment_lines,
+                complexity=complexity,
+                maintainability_index=100.0  # Excluded files get perfect score
+            )
+                
+        # Get AI-based maintainability assessment
         try:
+            prompt = f"""Please analyze this code and rate its maintainability on a scale of 0-100, considering:
+1. Code organization and structure
+2. Documentation and comments
+3. Complexity and readability
+4. Naming conventions
+5. Error handling
+6. Code duplication
+7. Test coverage (if any)
+
+Code:
+{content}
+
+Provide a single number between 0-100 representing the overall maintainability score."""
+
+            ai_response = self.llm_service.generate_with_prompt(prompt)
+            
+            # Extract the maintainability score from AI response
+            try:
+                # Try to find a number between 0-100 in the response
+                import re
+                numbers = re.findall(r'\b(?:100|[1-9]?[0-9])\b', ai_response)
+                if numbers:
+                    ai_maintainability = float(numbers[0])
+                else:
+                    # If no number found, use the default calculation
+                    ai_maintainability = 171 - 5.2 * (complexity / 10) - 0.23 * complexity - 16.2 * total_lines / 100
+            except:
+                # If parsing fails, use the default calculation
+                ai_maintainability = 171 - 5.2 * (complexity / 10) - 0.23 * complexity - 16.2 * total_lines / 100
+                
+            # Ensure the score is between 0 and 100
+            maintainability = max(0, min(100, ai_maintainability))
+            
+        except Exception as e:
+            self.logger.warning(f"Error getting AI maintainability assessment: {str(e)}")
+            # Fallback to default calculation if AI analysis fails
             maintainability = 171 - 5.2 * (complexity / 10) - 0.23 * complexity - 16.2 * total_lines / 100
-            maintainability = max(0, min(100, maintainability))  # Clamp between 0 and 100
-        except:
-            maintainability = 50  # Default value if calculation fails
+            maintainability = max(0, min(100, maintainability))
             
         return CodeMetrics(
             lines_of_code=total_lines,
@@ -409,6 +479,20 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
             index_content.append(f"- Total Files: {len(analyses)}")
             index_content.append(f"- Analysis Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
             
+            # Calculate project metrics
+            total_lines = sum(analysis.metrics.lines_of_code for analysis in analyses)
+            total_comments = sum(analysis.metrics.comment_lines for analysis in analyses)
+            avg_complexity = sum(analysis.metrics.complexity for analysis in analyses) / len(analyses) if analyses else 0
+            avg_maintainability = sum(analysis.metrics.maintainability_index for analysis in analyses) / len(analyses) if analyses else 0
+            
+            # Add metrics section
+            index_content.append("## Project Metrics")
+            index_content.append(f"- Total Lines of Code: {total_lines}")
+            index_content.append(f"- Total Comment Lines: {total_comments}")
+            index_content.append(f"- Comment Ratio: {(total_comments/total_lines*100):.1f}%")
+            index_content.append(f"- Average Complexity: {avg_complexity:.1f}")
+            index_content.append(f"- Average Maintainability Index: {avg_maintainability:.1f}/100\n")
+            
             # Add file summaries
             index_content.append("## File Summaries")
             for analysis in analyses:
@@ -430,7 +514,10 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
                 # Add file section with proper formatting
                 index_content.append(f"\n### {file_name}")
                 if file_path:
-                    index_content.append(f"Path: {file_path}\n")
+                    index_content.append(f"Path: {file_path}")
+                    index_content.append(f"Lines of Code: {analysis.metrics.lines_of_code}")
+                    index_content.append(f"Complexity: {analysis.metrics.complexity}")
+                    index_content.append(f"Maintainability: {analysis.metrics.maintainability_index}/100\n")
                 
                 if concise_summary:
                     index_content.append("#### Purpose")
