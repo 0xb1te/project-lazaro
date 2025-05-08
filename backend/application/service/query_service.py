@@ -66,6 +66,7 @@ class QueryService:
                     query_vector=query_embedding,
                     limit=5,  # Get more index chunks for better context
                     filter_criteria={
+                        "is_index": True,
                         "document_type": "index",
                         "conversation_id": query_request.conversation_id
                     },
@@ -73,6 +74,8 @@ class QueryService:
                 )
             except Exception as e:
                 print(f"Warning: Error searching index chunks: {str(e)}")
+
+            print(f"Index Chunks: {index_chunks} found for query: {query_request.query} and conversation_id: {query_request.conversation_id}")
             
             # Step 2: First LLM Call - Ask AI to identify relevant files from index content
             relevant_files = set()

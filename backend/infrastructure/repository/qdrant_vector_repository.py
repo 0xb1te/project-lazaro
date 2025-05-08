@@ -159,6 +159,21 @@ class QdrantVectorRepository(VectorRepository):
             # Convert documents to points
             points = []
             for doc in documents:
+                # Handle index documents specially
+                if isinstance(doc, DocumentChunk) and doc.metadata.get('is_index', False):
+                    point = models.PointStruct(
+                        id=doc.chunk_id,
+                        vector=doc.embedding,  # Use actual embedding for index docs
+                        payload={
+                            'content': doc.content,  # Store content directly
+                            'metadata': doc.metadata,
+                            'document_id': doc.document_id,
+                            'is_index': True  # Mark as index document
+                        }
+                    )
+                    points.append(point)
+                    continue
+                
                 # Handle analysis documents (without embeddings) differently
                 if isinstance(doc, DocumentChunk) and doc.metadata.get('type') == 'analysis':
                     point = models.PointStruct(
@@ -227,41 +242,67 @@ class QdrantVectorRepository(VectorRepository):
         Returns:
             List of document chunks with similarity scores
         """
-        # Determine collection name
-        if collection_name is None:
-            collection_name = self._get_collection_name(conversation_id)
-        
-        # Prepare search filter if provided
-        search_filter = None
-        if filter_criteria:
+        try:
+            # Determine collection name
+            if collection_name is None:
+                collection_name = self._get_collection_name(conversation_id)
+            
+            # Log the search parameters
+            self.logger.debug(f"Searching in collection: {collection_name}")
+            self.logger.debug(f"Filter criteria: {filter_criteria}")
+            
+            # Build filter conditions
             filter_conditions = []
             
-            for key, value in filter_criteria.items():
-                if key.startswith('metadata.'):
-                    # For metadata fields, we need to use a special syntax
-                    metadata_key = key.replace('metadata.', '')
-                    filter_conditions.append(
-                        FieldCondition(
-                            key=f"metadata.{metadata_key}",
-                            match=MatchValue(value=value)
+            if filter_criteria:
+                for key, value in filter_criteria.items():
+                    # Handle special cases
+                    if key == 'is_index':
+                        filter_conditions.append(
+                            FieldCondition(
+                                key='is_index',
+                                match=MatchValue(value=value)
+                            )
                         )
-                    )
-                else:
-                    # For top-level fields
-                    filter_conditions.append(
-                        FieldCondition(
-                            key=key,
-                            match=MatchValue(value=value)
+                    elif key == 'document_type':
+                        filter_conditions.append(
+                            FieldCondition(
+                                key='metadata.document_type',
+                                match=MatchValue(value=value)
+                            )
                         )
-                    )
+                    elif key == 'conversation_id':
+                        filter_conditions.append(
+                            FieldCondition(
+                                key='metadata.conversation_id',
+                                match=MatchValue(value=value)
+                            )
+                        )
+                    elif key.startswith('metadata.'):
+                        # Handle other metadata fields
+                        metadata_key = key.replace('metadata.', '')
+                        filter_conditions.append(
+                            FieldCondition(
+                                key=f'metadata.{metadata_key}',
+                                match=MatchValue(value=value)
+                            )
+                        )
+                    else:
+                        # Handle other top-level fields
+                        filter_conditions.append(
+                            FieldCondition(
+                                key=key,
+                                match=MatchValue(value=value)
+                            )
+                        )
             
-            # Create the final filter
-            search_filter = Filter(
-                must=filter_conditions
-            )
-        
-        try:
-            # Search for similar vectors
+            # Create the search filter if we have conditions
+            search_filter = None
+            if filter_conditions:
+                search_filter = Filter(must=filter_conditions)
+                self.logger.debug(f"Using search filter: {search_filter}")
+            
+            # Perform the search
             search_result = self.client.search(
                 collection_name=collection_name,
                 query_vector=query_vector,
@@ -269,28 +310,41 @@ class QdrantVectorRepository(VectorRepository):
                 query_filter=search_filter
             )
             
-            # Format results
+            # Process and format results
             results = []
             for scored_point in search_result:
-                # Get text content from the correct field
-                text = scored_point.payload.get("content", "")
-                if not text:
-                    # Fallback to 'text' field for backward compatibility
-                    text = scored_point.payload.get("text", "")
-                
-                results.append({
-                    "id": scored_point.id,
-                    "text": text,
-                    "similarity": scored_point.score,
-                    "metadata": scored_point.payload.get("metadata", {}),
-                    "document_id": scored_point.payload.get("document_id")
-                })
+                try:
+                    # Extract content from the correct field
+                    content = scored_point.payload.get('content', '')
+                    
+                    # Build the result object
+                    result = {
+                        'id': scored_point.id,
+                        'text': content,
+                        'similarity': scored_point.score,
+                        'metadata': scored_point.payload.get('metadata', {}),
+                        'document_id': scored_point.payload.get('document_id')
+                    }
+                    
+                    # Add special flags
+                    if scored_point.payload.get('is_index', False):
+                        result['is_index'] = True
+                    
+                    results.append(result)
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error processing search result point: {str(e)}")
+                    continue
             
+            # Log the results
             self.logger.info(f"Found {len(results)} results in collection {collection_name}")
+            if results:
+                self.logger.debug(f"First result similarity score: {results[0]['similarity']}")
+            
             return results
             
         except Exception as e:
-            self.logger.error(f"Error searching similar vectors: {str(e)}")
+            self.logger.error(f"Error in search_similar: {str(e)}")
             raise
     
     def clear_collection(self, collection_name: str = None) -> None:
@@ -478,11 +532,19 @@ class QdrantVectorRepository(VectorRepository):
             # Format results
             results = []
             for point in search_result[0]:
-                results.append({
+                # Create result with proper structure
+                result = {
                     "id": point.id,
                     "content": point.payload.get("content", ""),
-                    "metadata": point.payload.get("metadata", {})
-                })
+                    "metadata": point.payload.get("metadata", {}),
+                    "document_id": point.payload.get("document_id")
+                }
+                
+                # Add special handling for index documents
+                if point.payload.get("is_index", False):
+                    result["is_index"] = True
+                    
+                results.append(result)
             
             self.logger.info(f"Found {len(results)} documents matching metadata filter")
             return results
