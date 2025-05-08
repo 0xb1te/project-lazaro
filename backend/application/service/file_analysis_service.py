@@ -201,39 +201,15 @@ Functions:
 Dependencies:
 {dependencies_str}"""
 
-        prompt = f"""IMPORTANT: You MUST respond with ONLY a JSON object. DO NOT include any explanations, text, or markdown outside the JSON object.
+        prompt = f"""Please analyze the following file and answer these specific questions:
 
-Your task is to analyze this file and output a JSON object with the following EXACT structure:
+1. What is the purpose of this file? Provide a clear and concise description of what this file does and its role in the project.
 
-{{
-    "summary": {{
-        "purpose": "Brief description of file's purpose",
-        "components": ["List of major components"],
-        "patterns": ["List of design patterns used"],
-        "algorithms": ["List of algorithms or key processes"],
-        "organization": "How the file is structured"
-    }},
-    "relationships": [
-        {{
-            "type": "Type of relationship (import/extends/uses)",
-            "name": "Name of related component",
-            "description": "Description of relationship"
-        }}
-    ],
-    "hierarchy": {{
-        "parents": ["Parent modules/components"],
-        "children": ["Child components"],
-        "layer": "Architectural layer",
-        "dependencies": ["External dependencies"],
-        "lifecycle": "Component lifecycle description"
-    }},
-    "swot": {{
-        "strengths": ["List of strengths"],
-        "weaknesses": ["List of weaknesses"],
-        "opportunities": ["List of opportunities"],
-        "threats": ["List of threats"]
-    }}
-}}
+2. What components and libraries are used in this file? List all major components, libraries, and dependencies that this file utilizes.
+
+3. What design patterns or architectural patterns are used in this file? Identify any specific patterns or approaches used in the implementation.
+
+4. What are the weaknesses or potential issues in this file? Identify any code smells, potential bugs, or areas for improvement.
 
 File Information:
 Path: {file_path}
@@ -243,19 +219,7 @@ Type: {file_type}
 File Content:
 {content}
 
-RULES:
-1. Output MUST be a SINGLE, VALID JSON object
-2. DO NOT include any text before or after the JSON
-3. DO NOT include any explanations or comments
-4. ALL property names MUST be in double quotes
-5. ALL string values MUST be in double quotes
-6. Arrays MUST use square brackets []
-7. Objects MUST use curly braces {{}}
-8. Use commas between items in arrays and objects
-9. DO NOT use trailing commas
-10. DO NOT include any markdown formatting
-
-Remember: ONLY output the JSON object, nothing else."""
+Please provide clear and concise answers to each question. Focus on being specific and accurate in your analysis."""
 
         return prompt
     
@@ -272,99 +236,15 @@ Remember: ONLY output the JSON object, nothing else."""
                 self.logger.error("Empty analysis result received")
                 raise ValueError("Empty analysis result")
             
-            # Find the JSON object
-            start_idx = result.find('{')
-            end_idx = result.rfind('}')
-            
-            if start_idx == -1 or end_idx <= start_idx:
-                self.logger.error("No valid JSON found in response")
-                self.logger.error(f"Response content:\n{result}")
-                raise ValueError("No valid JSON found in response")
-                
-            json_str = result[start_idx:end_idx + 1]
-            self.logger.debug(f"Extracted JSON string:\n{json_str}")
-            
-            # Parse JSON using json5 (more lenient parser)
-            try:
-                self.logger.debug("Attempting JSON5 parsing...")
-                data = json5.loads(json_str)
-                self.logger.debug("JSON5 parsing successful")
-            except Exception as e:
-                self.logger.error(f"JSON5 parsing failed: {str(e)}")
-                self.logger.debug("Attempting manual reconstruction...")
-                
-                # If JSON5 fails, create a minimal valid structure
-                data = {
-                    "summary": {
-                        "purpose": "Error parsing LLM response",
-                        "components": [],
-                        "patterns": [],
-                        "algorithms": [],
-                        "organization": "Error parsing LLM response"
-                    },
-                    "relationships": [],
-                    "hierarchy": {
-                        "parents": [],
-                        "children": [],
-                        "layer": "Unknown",
-                        "dependencies": [],
-                        "lifecycle": "Error parsing LLM response"
-                    },
-                    "swot": {
-                        "strengths": [],
-                        "weaknesses": ["Error parsing LLM response"],
-                        "opportunities": [],
-                        "threats": []
-                    }
-                }
-                
-                # Try to extract some information from the response
-                try:
-                    # Extract purpose if available
-                    purpose_match = re.search(r'"purpose"\s*:\s*"([^"]+)"', json_str)
-                    if purpose_match:
-                        data["summary"]["purpose"] = purpose_match.group(1)
-                    
-                    # Extract components if available
-                    components = re.findall(r'"components"\s*:\s*\[(.*?)\]', json_str, re.DOTALL)
-                    if components:
-                        comp_items = re.findall(r'"([^"]+)"', components[0])
-                        data["summary"]["components"] = comp_items
-                    
-                    self.logger.debug("Manual extraction completed with partial data")
-                except Exception as e:
-                    self.logger.warning(f"Manual extraction failed: {str(e)}")
-            
-            # Clean up and validate the parsed data
-            if isinstance(data, dict):
-                # Remove any unexpected fields
-                valid_keys = {"summary", "relationships", "hierarchy", "swot"}
-                data = {k: v for k, v in data.items() if k in valid_keys}
-                
-                # Ensure relationships is a list
-                if "relationships" in data:
-                    if isinstance(data["relationships"], dict):
-                        data["relationships"] = [data["relationships"]]
-                    elif not isinstance(data["relationships"], list):
-                        data["relationships"] = []
-                
-                # Remove organization if it exists at root level
-                if "organization" in data:
-                    del data["organization"]
-                
-                # Ensure summary doesn't contain hierarchy info
-                if "summary" in data and isinstance(data["summary"], dict):
-                    valid_summary_keys = {"purpose", "components", "patterns", "algorithms", "organization"}
-                    data["summary"] = {k: v for k, v in data["summary"].items() if k in valid_summary_keys}
-            
-            # Create default structure
-            default_data = {
+            # Parse the question-based response
+            sections = result.split('\n\n')
+            analysis_data = {
                 "summary": {
-                    "purpose": "Not specified",
+                    "purpose": "",
                     "components": [],
                     "patterns": [],
                     "algorithms": [],
-                    "organization": "Not specified"
+                    "organization": ""
                 },
                 "relationships": [],
                 "hierarchy": {
@@ -382,26 +262,46 @@ Remember: ONLY output the JSON object, nothing else."""
                 }
             }
             
-            # Merge with defaults (only fill in missing or empty values)
-            def deep_merge(source, destination):
-                for key, value in source.items():
-                    if key not in destination:
-                        destination[key] = value
-                    elif isinstance(value, dict) and isinstance(destination[key], dict):
-                        deep_merge(value, destination[key])
-                    elif not destination[key]:  # Only replace empty values
-                        destination[key] = value
-                return destination
-            
-            merged_data = deep_merge(data, dict(default_data))
+            # Process each section
+            for section in sections:
+                section = section.strip()
+                if not section:
+                    continue
+                
+                # Extract purpose
+                if "1. What is the purpose" in section or "purpose" in section.lower():
+                    analysis_data["summary"]["purpose"] = section.split(":", 1)[-1].strip()
+                
+                # Extract components and libraries
+                elif "2. What components" in section or "components" in section.lower():
+                    components_text = section.split(":", 1)[-1].strip()
+                    # Split by newlines or commas and clean up
+                    components = [c.strip() for c in components_text.replace('\n', ',').split(',') if c.strip()]
+                    analysis_data["summary"]["components"] = components
+                    # Also add to dependencies
+                    analysis_data["hierarchy"]["dependencies"] = components
+                
+                # Extract patterns
+                elif "3. What design patterns" in section or "patterns" in section.lower():
+                    patterns_text = section.split(":", 1)[-1].strip()
+                    # Split by newlines or commas and clean up
+                    patterns = [p.strip() for p in patterns_text.replace('\n', ',').split(',') if p.strip()]
+                    analysis_data["summary"]["patterns"] = patterns
+                
+                # Extract weaknesses
+                elif "4. What are the weaknesses" in section or "weaknesses" in section.lower():
+                    weaknesses_text = section.split(":", 1)[-1].strip()
+                    # Split by newlines or commas and clean up
+                    weaknesses = [w.strip() for w in weaknesses_text.replace('\n', ',').split(',') if w.strip()]
+                    analysis_data["swot"]["weaknesses"] = weaknesses
             
             # Create FileAnalysis object
             analysis = FileAnalysis(
                 file_path="",  # Will be set later
-                summary=merged_data["summary"],
-                relationships=merged_data["relationships"],
-                hierarchy=merged_data["hierarchy"],
-                swot=merged_data["swot"],
+                summary=analysis_data["summary"],
+                relationships=analysis_data["relationships"],
+                hierarchy=analysis_data["hierarchy"],
+                swot=analysis_data["swot"],
                 metrics=CodeMetrics(
                     lines_of_code=0,
                     comment_lines=0,
@@ -493,98 +393,76 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
 
     def create_index_document(self, analyses: List[FileAnalysis]) -> str:
         """
-        Create an index document summarizing all analyzed files.
-        Uses vector embeddings to find relationships and organize content.
+        Create an index document with file summaries, relations, and patterns.
         
         Args:
             analyses: List of FileAnalysis objects
             
         Returns:
-            Markdown formatted index document
+            Index document as a string
         """
-        self.logger.info(f"Creating index document for {len(analyses)} files")
-        
         try:
-            # Create embeddings for each file's content and purpose
-            embeddings_map = {}
+            index_content = ["# Project Documentation Index\n"]
+            
+            # Add overview section
+            index_content.append("## Project Overview")
+            index_content.append(f"- Total Files: {len(analyses)}")
+            index_content.append(f"- Analysis Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+            
+            # Add file summaries
+            index_content.append("## File Summaries")
             for analysis in analyses:
-                # Create a rich text representation for embedding
-                content = f"""
-                Purpose: {analysis.summary.get('purpose', '')}
-                Components: {', '.join(analysis.summary.get('components', []))}
-                Patterns: {', '.join(analysis.summary.get('patterns', []))}
-                Organization: {analysis.summary.get('organization', '')}
-                Layer: {analysis.hierarchy.get('layer', '')}
-                """
-                try:
-                    embedding = self.embedding_service.get_embedding(content)
-                    embeddings_map[analysis.file_path] = {
-                        'embedding': embedding,
-                        'analysis': analysis
-                    }
-                except Exception as e:
-                    self.logger.warning(f"Failed to create embedding for {analysis.file_path}: {str(e)}")
+                file_path = analysis.file_path
+                file_name = os.path.basename(file_path) if file_path else 'Unknown File'
+                content_summary = analysis.summary.get('purpose', '')
+                file_relations = analysis.relationships
+                patterns = analysis.summary.get('patterns', [])
+                
+                # Make content summary more concise (4-5 lines)
+                summary_lines = content_summary.split('\n')
+                concise_summary = []
+                for line in summary_lines:
+                    if line.strip() and not line.startswith(('The main purpose', 'This file works', 'The key components', 'This file interacts')):
+                        concise_summary.append(line.strip())
+                        if len(concise_summary) >= 4:
+                            break
+                
+                # Add file section with proper formatting
+                index_content.append(f"\n### {file_name}")
+                if file_path:
+                    index_content.append(f"Path: {file_path}\n")
+                
+                if concise_summary:
+                    index_content.append("#### Purpose")
+                    index_content.append('\n'.join(concise_summary))
+                    index_content.append("")  # Add empty line after summary
+                
+                if file_relations:
+                    index_content.append("#### Relationships")
+                    if file_relations.get('parents'):
+                        index_content.append("\nDependencies:")
+                        for parent in file_relations['parents']:
+                            if parent.strip():  # Only add non-empty relations
+                                index_content.append(f"- {parent}")
+                    if file_relations.get('children'):
+                        index_content.append("\nDependents:")
+                        for child in file_relations['children']:
+                            if child.strip():  # Only add non-empty relations
+                                index_content.append(f"- {child}")
+                    index_content.append("")  # Add empty line after relations
+                
+                if patterns:
+                    index_content.append("#### Design Patterns")
+                    for pattern in patterns:
+                        if pattern.strip():  # Only add non-empty patterns
+                            index_content.append(f"- {pattern}")
+                    index_content.append("")  # Add empty line after patterns
             
-            # Group files by similarity using embeddings
-            similarity_groups = self._group_by_similarity(embeddings_map)
-            
-            # Generate sections with enhanced context
-            self.logger.debug("Generating index sections...")
-            
-            # Overview section with architectural insights
-            overview = self._generate_enhanced_overview(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced overview")
-            
-            # Architecture diagram with relationship insights
-            dependency_graph = self._generate_enhanced_dependency_graph(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced dependency graph")
-            
-            # Metrics with context
-            metrics_summary = self._generate_metrics_summary(analyses)
-            self.logger.debug("Generated metrics summary")
-            
-            # Enhanced file catalog with related files
-            file_catalog = self._generate_enhanced_file_catalog(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced file catalog")
-            
-            # Component analysis with relationships
-            component_analysis = self._generate_enhanced_component_analysis(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced component analysis")
-            
-            # Getting started guide with context
-            starting_points = self._generate_enhanced_starting_points(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced starting points")
-            
-            # Detailed summaries with relationships
-            detailed_summaries = self._generate_enhanced_summaries(analyses, similarity_groups)
-            self.logger.debug("Generated enhanced summaries")
-            
-            # Combine all sections
-            index_content = [
-                "# Project Documentation Index\n",
-                "## Project Overview\n",
-                overview,
-                "\n## Architecture Overview\n",
-                "```mermaid\n" + dependency_graph + "\n```\n",
-                "\n## Code Metrics\n",
-                metrics_summary,
-                "\n## File Catalog\n",
-                file_catalog,
-                "\n## Component Analysis\n",
-                component_analysis,
-                "\n## Getting Started\n",
-                starting_points,
-                "\n## Detailed File Summaries\n",
-                detailed_summaries
-            ]
-            
-            result = "\n".join(index_content)
-            self.logger.info(f"Successfully generated enhanced index document of length: {len(result)}")
-            return result
+            return "\n".join(index_content)
             
         except Exception as e:
-            self.logger.error(f"Error generating index document: {str(e)}")
-            raise
+            self.logger.error(f"Error creating index document: {str(e)}")
+            return f"Error creating index document: {str(e)}"
 
     def _group_by_similarity(self, embeddings_map: Dict[str, Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """Group files by similarity using vector embeddings."""
