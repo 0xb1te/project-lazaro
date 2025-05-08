@@ -321,129 +321,257 @@ Output a single JSON object with this exact structure. Provide DETAILED and SPEC
     }}
 }}
 
-IMPORTANT:
-1. Output ONLY the JSON object, no other text
-2. Use the EXACT structure shown above
-3. Ensure all JSON is properly formatted and escaped
-4. Include ALL required fields (summary, relationships, hierarchy, swot)
-5. Provide DETAILED, SPECIFIC information, not generic statements
-6. Base all analysis on actual content found in the file
-7. Include concrete examples and line references where possible
-"""
+IMPORTANT JSON FORMATTING RULES:
+1. ALL property names MUST be enclosed in double quotes
+2. ALL string values MUST be enclosed in double quotes
+3. Use commas to separate ALL items in arrays and objects
+4. Do NOT include trailing commas after the last item
+5. Do NOT include any text before or after the JSON object
+6. Ensure ALL brackets and braces are properly closed
+7. Escape any double quotes within string values with a backslash
+8. Do NOT include any comments or explanatory text
+9. The response must be a single, valid JSON object
+10. Verify the JSON is properly formatted before submitting
+
+Example of correct JSON formatting:
+{{
+    "summary": {{
+        "purpose": "This is a properly formatted string value",
+        "components": [
+            "First component",
+            "Second component"
+        ]
+    }}
+}}"""
 
         return prompt
     
     def _parse_analysis_result(self, result: str) -> FileAnalysis:
         """Parse the LLM analysis result into a FileAnalysis object."""
         try:
-            self.logger.debug("Starting to parse analysis result...")
+            self.logger.info("Starting to parse analysis result...")
+            self.logger.debug(f"Raw response length: {len(result)} characters")
+            self.logger.debug(f"Raw response content:\n{result}")
             
             # Clean up the result string
             result = result.strip()
             if not result:
+                self.logger.error("Empty analysis result received")
                 raise ValueError("Empty analysis result")
             
-            # Find the JSON object
+            # Find the JSON object with more flexible matching
             start_idx = result.find('{')
-            end_idx = result.rfind('}') + 1
+            end_idx = result.rfind('}')
+            
+            self.logger.debug(f"JSON boundaries - Start index: {start_idx}, End index: {end_idx}")
             
             if start_idx == -1 or end_idx <= start_idx:
                 self.logger.error("No valid JSON found in response")
-                self.logger.debug(f"Response content: {result}")
+                self.logger.error(f"Response content:\n{result}")
+                self.logger.error(f"Response contains '{{': {result.count('{')} times")
+                self.logger.error(f"Response contains '}}': {result.count('}')} times")
                 raise ValueError("No valid JSON found in response")
                 
-            json_str = result[start_idx:end_idx]
-            self.logger.debug(f"Extracted JSON string: {json_str}")
+            json_str = result[start_idx:end_idx + 1]
+            self.logger.debug(f"Extracted JSON string:\n{json_str}")
             
-            # Parse JSON with error handling
+            # Pre-process common JSON formatting issues
+            json_str = re.sub(r'"\s*,\s*}', '"}', json_str)  # Remove trailing commas
+            json_str = re.sub(r'"\s*,\s*]', '"]', json_str)  # Remove trailing commas in arrays
+            
+            # Parse JSON with multiple cleanup attempts
+            data = None
+            json_errors = []
+            
+            # First attempt: direct parsing
             try:
+                self.logger.debug("Attempting direct JSON parsing...")
                 data = json.loads(json_str)
+                self.logger.debug("Direct JSON parsing successful")
             except json.JSONDecodeError as e:
-                # Try to clean up common JSON formatting issues
-                json_str = json_str.replace('\n', ' ').replace('\r', '')
-                json_str = re.sub(r',\s*}', '}', json_str)  # Remove trailing commas
-                json_str = re.sub(r',\s*]', ']', json_str)  # Remove trailing commas in arrays
+                json_errors.append(f"Initial parse error: {str(e)}")
+                self.logger.warning(f"Direct JSON parsing failed: {str(e)}")
+                self.logger.debug(f"Failed JSON string:\n{json_str}")
+                
+                # Second attempt: aggressive cleanup
                 try:
-                    data = json.loads(json_str)
-                except json.JSONDecodeError:
-                    self.logger.error(f"JSON parsing error after cleanup: {str(e)}")
-                    self.logger.debug(f"Failed JSON string: {json_str}")
-                    raise
-            
-            # Validate and ensure required fields
-            required_fields = ['summary', 'relationships', 'hierarchy', 'swot']
-            missing_fields = [field for field in required_fields if field not in data]
-            if missing_fields:
-                self.logger.error(f"Missing required fields in analysis: {missing_fields}")
-                # Create default values for missing fields
-                for field in missing_fields:
-                    if field == 'summary':
-                        data['summary'] = {
-                            'purpose': 'Not specified',
-                            'components': [],
-                            'patterns': [],
-                            'algorithms': [],
-                            'organization': 'Not specified'
+                    self.logger.debug("Attempting aggressive JSON cleanup...")
+                    # More aggressive cleanup
+                    cleaned_json = json_str
+                    
+                    # Fix common structural issues
+                    # Remove trailing commas in objects and arrays
+                    cleaned_json = re.sub(r',\s*}', '}', cleaned_json)
+                    cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
+                    
+                    # Fix missing commas between elements
+                    cleaned_json = re.sub(r'}\s*{', '},{', cleaned_json)
+                    cleaned_json = re.sub(r']\s*{', '],{', cleaned_json)
+                    cleaned_json = re.sub(r'}\s*\[', '},\[', cleaned_json)
+                    cleaned_json = re.sub(r'"}\s*"', '"},"', cleaned_json)
+                    
+                    # Fix unquoted keys
+                    cleaned_json = re.sub(r'([{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', cleaned_json)
+                    
+                    # Fix organization structure issues
+                    # If organization appears as a field in summary but contains hierarchy data
+                    org_pattern = r'"organization"\s*:\s*{([^}]+)}'
+                    org_match = re.search(org_pattern, cleaned_json)
+                    if org_match:
+                        org_content = org_match.group(1)
+                        # Remove the organization field from summary
+                        cleaned_json = re.sub(org_pattern, '', cleaned_json)
+                        # Fix any double commas that might have been created
+                        cleaned_json = re.sub(r',\s*,', ',', cleaned_json)
+                    
+                    # Fix relationships format issues
+                    # If relationships is an object instead of an array
+                    if '"relationships"' in cleaned_json and not re.search(r'"relationships"\s*:\s*\[', cleaned_json):
+                        # Convert object to array
+                        cleaned_json = re.sub(r'"relationships"\s*:\s*{', '"relationships": [{', cleaned_json)
+                        cleaned_json = re.sub(r'}(\s*[,}])', '}]\\1', cleaned_json)
+                    
+                    # Fix trailing commas in arrays and objects again (after other replacements)
+                    cleaned_json = re.sub(r',(\s*[}\]])', '\\1', cleaned_json)
+                    
+                    # Remove any extra commas
+                    cleaned_json = re.sub(r',\s*,', ',', cleaned_json)
+                    
+                    # Fix missing quotes around string values
+                    cleaned_json = re.sub(r':\s*([^",{}\[\]\s][^,{}\[\]"]*?)(\s*[,}\]])', r':"\1"\\2', cleaned_json)
+                    
+                    # Fix arrays with trailing commas
+                    cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
+                    
+                    self.logger.debug(f"Aggressive cleanup result:\n{cleaned_json}")
+                    data = json.loads(cleaned_json)
+                    self.logger.debug("Aggressive cleanup parsing successful")
+                except json.JSONDecodeError as e:
+                    json_errors.append(f"Aggressive cleanup error: {str(e)}")
+                    
+                    # Third attempt: manual structure reconstruction
+                    try:
+                        self.logger.debug("Attempting manual JSON reconstruction...")
+                        # Create a minimal valid JSON structure
+                        data = {
+                            "summary": {
+                                "purpose": "Error parsing LLM response",
+                                "components": [],
+                                "patterns": [],
+                                "algorithms": [],
+                                "organization": "Error parsing LLM response"
+                            },
+                            "relationships": [],
+                            "hierarchy": {
+                                "parents": [],
+                                "children": [],
+                                "layer": "Unknown",
+                                "dependencies": [],
+                                "lifecycle": "Error parsing LLM response"
+                            },
+                            "swot": {
+                                "strengths": [],
+                                "weaknesses": ["Error parsing LLM response"],
+                                "opportunities": [],
+                                "threats": []
+                            }
                         }
-                    elif field == 'relationships':
-                        data['relationships'] = []
-                    elif field == 'hierarchy':
-                        data['hierarchy'] = {
-                            'parents': [],
-                            'children': [],
-                            'layer': 'Not specified',
-                            'dependencies': [],
-                            'lifecycle': 'Not specified'
-                        }
-                    elif field == 'swot':
-                        data['swot'] = {
-                            'strengths': [],
-                            'weaknesses': [],
-                            'opportunities': [],
-                            'threats': []
-                        }
+                        
+                        # Try to extract some information from the response
+                        # Extract purpose if available
+                        purpose_match = re.search(r'"purpose"\s*:\s*"([^"]+)"', json_str)
+                        if purpose_match:
+                            data["summary"]["purpose"] = purpose_match.group(1)
+                        
+                        self.logger.debug("Manual reconstruction successful with partial data")
+                    except Exception as e:
+                        json_errors.append(f"Manual reconstruction error: {str(e)}")
+                        self.logger.error(f"All JSON parsing attempts failed: {'; '.join(json_errors)}")
+                        self.logger.error(f"Final failed JSON string:\n{cleaned_json}")
+                        raise ValueError(f"Failed to parse JSON: {'; '.join(json_errors)}")
             
-            # Ensure relationships is a list
-            if not isinstance(data['relationships'], list):
-                data['relationships'] = []
+            # Create default structure for missing fields
+            default_data = {
+                'summary': {
+                    'purpose': 'Not specified',
+                    'components': [],
+                    'patterns': [],
+                    'algorithms': [],
+                    'organization': 'Not specified'
+                },
+                'relationships': [],
+                'hierarchy': {
+                    'parents': [],
+                    'children': [],
+                    'layer': 'Not specified',
+                    'dependencies': [],
+                    'lifecycle': 'Not specified'
+                },
+                'swot': {
+                    'strengths': [],
+                    'weaknesses': [],
+                    'opportunities': [],
+                    'threats': []
+                }
+            }
             
-            # Ensure all lists in summary are lists
-            for key in ['components', 'patterns', 'algorithms']:
-                if not isinstance(data['summary'].get(key), list):
-                    data['summary'][key] = []
+            # Clean up and validate the parsed data
+            if isinstance(data, dict):
+                # Remove any unexpected fields
+                data = {k: v for k, v in data.items() if k in default_data}
+                
+                # Ensure relationships is a list
+                if 'relationships' in data:
+                    if isinstance(data['relationships'], dict):
+                        # Convert dict to list if needed
+                        data['relationships'] = [data['relationships']]
+                
+                # Remove organization if it exists at root level
+                if 'organization' in data:
+                    del data['organization']
+                
+                # Ensure summary doesn't contain hierarchy info
+                if 'summary' in data and isinstance(data['summary'], dict):
+                    data['summary'] = {k: v for k, v in data['summary'].items() 
+                                     if k in default_data['summary']}
             
-            # Ensure all lists in hierarchy are lists
-            for key in ['parents', 'children', 'dependencies']:
-                if not isinstance(data['hierarchy'].get(key), list):
-                    data['hierarchy'][key] = []
+            # Deep merge with defaults
+            def deep_merge(source, destination):
+                for key, value in source.items():
+                    if key not in destination:
+                        destination[key] = value
+                    elif isinstance(value, dict) and isinstance(destination[key], dict):
+                        deep_merge(value, destination[key])
+                    elif key in destination and not destination[key]:
+                        # Only replace empty values
+                        destination[key] = value
+                return destination
             
-            # Ensure all lists in swot are lists
-            for key in ['strengths', 'weaknesses', 'opportunities', 'threats']:
-                if not isinstance(data['swot'].get(key), list):
-                    data['swot'][key] = []
+            merged_data = deep_merge(data, dict(default_data))
             
             # Create FileAnalysis object
             analysis = FileAnalysis(
                 file_path="",  # Will be set later
-                summary=data['summary'],
-                relationships=data['relationships'],
-                hierarchy=data['hierarchy'],
-                swot=data['swot'],
-                metrics=CodeMetrics(**data.get('metrics', {
-                    'lines_of_code': 0,
-                    'comment_lines': 0,
-                    'complexity': 0,
-                    'maintainability_index': 0.0
-                })),
+                summary=merged_data['summary'],
+                relationships=merged_data['relationships'],
+                hierarchy=merged_data['hierarchy'],
+                swot=merged_data['swot'],
+                metrics=CodeMetrics(
+                    lines_of_code=0,
+                    comment_lines=0,
+                    complexity=0,
+                    maintainability_index=0.0
+                ),
                 timestamp=datetime.utcnow()
             )
             
-            self.logger.debug("Successfully created FileAnalysis object")
+            self.logger.info("Successfully created FileAnalysis object")
             return analysis
             
         except Exception as e:
             self.logger.error(f"Error parsing analysis result: {str(e)}")
-            # Return a default FileAnalysis object instead of raising
+            self.logger.error("Full error details:", exc_info=True)
+            # Return a default FileAnalysis object with error information
             return FileAnalysis(
                 file_path="",
                 summary={
@@ -451,7 +579,7 @@ IMPORTANT:
                     'components': [],
                     'patterns': [],
                     'algorithms': [],
-                    'organization': 'Error during analysis'
+                    'organization': f'Error during analysis: {str(e)}'
                 },
                 relationships=[],
                 hierarchy={
@@ -459,11 +587,11 @@ IMPORTANT:
                     'children': [],
                     'layer': 'Unknown',
                     'dependencies': [],
-                    'lifecycle': 'Error during analysis'
+                    'lifecycle': f'Error during analysis: {str(e)}'
                 },
                 swot={
                     'strengths': [],
-                    'weaknesses': ['Error during file analysis'],
+                    'weaknesses': [f'Error during file analysis: {str(e)}'],
                     'opportunities': [],
                     'threats': ['Analysis failed']
                 },
@@ -632,7 +760,7 @@ The index should be in Markdown format, be concise (2-3 pages), and provide a cl
                         continue
                     
                     try:
-                        similarity = self.embedding_service.calculate_similarity(
+                        similarity = self.embedding_service.compute_similarity(
                             base_embedding,
                             other_data['embedding']
                         )
