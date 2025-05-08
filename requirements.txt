@@ -4,6 +4,7 @@ flask-cors
 waitress
 python-dotenv
 werkzeug
+json5
 
 # Vector database
 qdrant-client

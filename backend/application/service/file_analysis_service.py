@@ -3,8 +3,9 @@ from datetime import datetime
 import os
 import ast
 import json
-from dataclasses import dataclass, asdict
+import json5  # Add json5 import
 import re
+from dataclasses import dataclass, asdict
 from collections import defaultdict
 import logging
 
@@ -199,150 +200,62 @@ Functions:
 
 Dependencies:
 {dependencies_str}"""
-        
-        # Add structure analysis
-        structure_info = ""
-        if structure_analysis:
-            sections_str = '\n'.join(f"- {sec['name']} (lines {sec['start']+1}-{sec['end']})" 
-                                   for sec in structure_analysis['sections'])
-            patterns_str = '\n'.join(f"- {pat['name']} at line {pat['line']}: {pat['context']}" 
-                                   for pat in structure_analysis['patterns'])
-            hotspots_str = '\n'.join(f"- Line {hot['line']}: {hot['content']}" 
-                                    for hot in structure_analysis['complexity_hotspots'])
-            
-            structure_info = f"""
-Code Structure:
-Sections:
-{sections_str}
 
-Design Patterns Detected:
-{patterns_str}
+        prompt = f"""IMPORTANT: You MUST respond with ONLY a JSON object. DO NOT include any explanations, text, or markdown outside the JSON object.
 
-Complexity Hotspots:
-{hotspots_str}"""
-        
-        # Add metrics to prompt
-        metrics_info = f"""
-Code Metrics:
-- Lines of Code: {metrics.lines_of_code}
-- Comment Lines: {metrics.comment_lines}
-- Complexity: {metrics.complexity}
-- Maintainability Index: {metrics.maintainability_index:.2f}/100"""
+Your task is to analyze this file and output a JSON object with the following EXACT structure:
 
-        # Add file type specific instructions
-        file_type_instructions = ""
-        if file_type == '.md':
-            file_type_instructions = """
-For Markdown documentation files:
-1. Analyze the document structure (headers, sections, lists)
-2. Identify key topics and concepts covered
-3. Look for requirements, specifications, or design decisions
-4. Note any TODOs, open questions, or decisions to be made
-5. Consider the document's role in the overall project documentation
-6. Look for links to other documents or components
-7. Identify architectural decisions or system design elements
-8. Note any implementation details or technical specifications
-"""
-        elif file_type in ['.py', '.js', '.ts']:
-            file_type_instructions = """
-For code files:
-1. Identify the primary programming patterns and paradigms used
-2. Note any framework-specific conventions or patterns
-3. Look for error handling and validation approaches
-4. Identify performance considerations
-5. Note any security-related code or patterns
-6. Look for configuration or environment dependencies
-7. Identify test coverage and testability aspects
-8. Note any technical debt or areas for improvement
-"""
-
-        prompt = f"""You are a code analysis expert. Your task is to analyze a file and output ONLY a JSON object with a specific structure.
+{{
+    "summary": {{
+        "purpose": "Brief description of file's purpose",
+        "components": ["List of major components"],
+        "patterns": ["List of design patterns used"],
+        "algorithms": ["List of algorithms or key processes"],
+        "organization": "How the file is structured"
+    }},
+    "relationships": [
+        {{
+            "type": "Type of relationship (import/extends/uses)",
+            "name": "Name of related component",
+            "description": "Description of relationship"
+        }}
+    ],
+    "hierarchy": {{
+        "parents": ["Parent modules/components"],
+        "children": ["Child components"],
+        "layer": "Architectural layer",
+        "dependencies": ["External dependencies"],
+        "lifecycle": "Component lifecycle description"
+    }},
+    "swot": {{
+        "strengths": ["List of strengths"],
+        "weaknesses": ["List of weaknesses"],
+        "opportunities": ["List of opportunities"],
+        "threats": ["List of threats"]
+    }}
+}}
 
 File Information:
-- Path: {file_path}
-- Type: {file_type}
-{ast_info}{structure_info}{metrics_info}
-
-{file_type_instructions}
+Path: {file_path}
+Type: {file_type}
+{ast_info}
 
 File Content:
 {content}
 
-Output a single JSON object with this exact structure. Provide DETAILED and SPECIFIC information for each section, not generic statements:
+RULES:
+1. Output MUST be a SINGLE, VALID JSON object
+2. DO NOT include any text before or after the JSON
+3. DO NOT include any explanations or comments
+4. ALL property names MUST be in double quotes
+5. ALL string values MUST be in double quotes
+6. Arrays MUST use square brackets []
+7. Objects MUST use curly braces {{}}
+8. Use commas between items in arrays and objects
+9. DO NOT use trailing commas
+10. DO NOT include any markdown formatting
 
-{{
-    "summary": {{
-        "purpose": "Write a detailed description of the file's main purpose and role",
-        "components": [
-            "List all major components or sections with their specific purposes",
-            "Include all important elements found in the file"
-        ],
-        "patterns": [
-            "List all design patterns, architectural patterns, or documentation patterns found",
-            "Include specific examples from the file"
-        ],
-        "algorithms": [
-            "List any algorithms, processes, or workflows described",
-            "Include specific details about their implementation or description"
-        ],
-        "organization": "Describe how the file is structured and organized, with specific details"
-    }},
-    "relationships": [
-        {{
-            "type": "Relationship type (e.g., import, reference, implements, documents)",
-            "name": "Name of the related component",
-            "description": "Detailed description of how they are related"
-        }}
-    ],
-    "hierarchy": {{
-        "parents": ["List parent modules, classes, or documents that this file depends on"],
-        "children": ["List components that depend on or are documented in this file"],
-        "layer": "Specific architectural or documentation layer (e.g., UI, Business Logic, Data)",
-        "dependencies": ["List all external dependencies with their purposes"],
-        "lifecycle": "Describe how this file is used, updated, and maintained"
-    }},
-    "swot": {{
-        "strengths": [
-            "List specific strengths with concrete examples from the file",
-            "Include technical merits, good practices found"
-        ],
-        "weaknesses": [
-            "List specific areas that need improvement",
-            "Include technical debt, missing elements"
-        ],
-        "opportunities": [
-            "List specific ways the file could be enhanced",
-            "Include potential new features or improvements"
-        ],
-        "threats": [
-            "List specific risks or potential issues",
-            "Include maintenance concerns, scalability issues"
-        ]
-    }}
-}}
-
-IMPORTANT JSON FORMATTING RULES:
-1. ALL property names MUST be enclosed in double quotes
-2. ALL string values MUST be enclosed in double quotes
-3. Use commas to separate ALL items in arrays and objects
-4. Do NOT include trailing commas after the last item
-5. Do NOT include any text before or after the JSON object
-6. Ensure ALL brackets and braces are properly closed
-7. Escape any double quotes within string values with a backslash
-8. Do NOT include any comments or explanatory text
-9. The response must be a single, valid JSON object
-10. Verify the JSON is properly formatted before submitting
-
-Example of correct JSON formatting:
-{{
-    "summary": {{
-        "purpose": "This is a properly formatted string value",
-        "components": [
-            "First component",
-            "Second component"
-        ]
-    }}
-}}"""
+Remember: ONLY output the JSON object, nothing else."""
 
         return prompt
     
@@ -359,191 +272,124 @@ Example of correct JSON formatting:
                 self.logger.error("Empty analysis result received")
                 raise ValueError("Empty analysis result")
             
-            # Find the JSON object with more flexible matching
+            # Find the JSON object
             start_idx = result.find('{')
             end_idx = result.rfind('}')
-            
-            self.logger.debug(f"JSON boundaries - Start index: {start_idx}, End index: {end_idx}")
             
             if start_idx == -1 or end_idx <= start_idx:
                 self.logger.error("No valid JSON found in response")
                 self.logger.error(f"Response content:\n{result}")
-                self.logger.error(f"Response contains '{{': {result.count('{')} times")
-                self.logger.error(f"Response contains '}}': {result.count('}')} times")
                 raise ValueError("No valid JSON found in response")
                 
             json_str = result[start_idx:end_idx + 1]
             self.logger.debug(f"Extracted JSON string:\n{json_str}")
             
-            # Pre-process common JSON formatting issues
-            json_str = re.sub(r'"\s*,\s*}', '"}', json_str)  # Remove trailing commas
-            json_str = re.sub(r'"\s*,\s*]', '"]', json_str)  # Remove trailing commas in arrays
-            
-            # Parse JSON with multiple cleanup attempts
-            data = None
-            json_errors = []
-            
-            # First attempt: direct parsing
+            # Parse JSON using json5 (more lenient parser)
             try:
-                self.logger.debug("Attempting direct JSON parsing...")
-                data = json.loads(json_str)
-                self.logger.debug("Direct JSON parsing successful")
-            except json.JSONDecodeError as e:
-                json_errors.append(f"Initial parse error: {str(e)}")
-                self.logger.warning(f"Direct JSON parsing failed: {str(e)}")
-                self.logger.debug(f"Failed JSON string:\n{json_str}")
+                self.logger.debug("Attempting JSON5 parsing...")
+                data = json5.loads(json_str)
+                self.logger.debug("JSON5 parsing successful")
+            except Exception as e:
+                self.logger.error(f"JSON5 parsing failed: {str(e)}")
+                self.logger.debug("Attempting manual reconstruction...")
                 
-                # Second attempt: aggressive cleanup
-                try:
-                    self.logger.debug("Attempting aggressive JSON cleanup...")
-                    # More aggressive cleanup
-                    cleaned_json = json_str
-                    
-                    # Fix common structural issues
-                    # Remove trailing commas in objects and arrays
-                    cleaned_json = re.sub(r',\s*}', '}', cleaned_json)
-                    cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
-                    
-                    # Fix missing commas between elements
-                    cleaned_json = re.sub(r'}\s*{', '},{', cleaned_json)
-                    cleaned_json = re.sub(r']\s*{', '],{', cleaned_json)
-                    cleaned_json = re.sub(r'}\s*\[', '},\[', cleaned_json)
-                    cleaned_json = re.sub(r'"}\s*"', '"},"', cleaned_json)
-                    
-                    # Fix unquoted keys
-                    cleaned_json = re.sub(r'([{,])\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', cleaned_json)
-                    
-                    # Fix organization structure issues
-                    # If organization appears as a field in summary but contains hierarchy data
-                    org_pattern = r'"organization"\s*:\s*{([^}]+)}'
-                    org_match = re.search(org_pattern, cleaned_json)
-                    if org_match:
-                        org_content = org_match.group(1)
-                        # Remove the organization field from summary
-                        cleaned_json = re.sub(org_pattern, '', cleaned_json)
-                        # Fix any double commas that might have been created
-                        cleaned_json = re.sub(r',\s*,', ',', cleaned_json)
-                    
-                    # Fix relationships format issues
-                    # If relationships is an object instead of an array
-                    if '"relationships"' in cleaned_json and not re.search(r'"relationships"\s*:\s*\[', cleaned_json):
-                        # Convert object to array
-                        cleaned_json = re.sub(r'"relationships"\s*:\s*{', '"relationships": [{', cleaned_json)
-                        cleaned_json = re.sub(r'}(\s*[,}])', '}]\\1', cleaned_json)
-                    
-                    # Fix trailing commas in arrays and objects again (after other replacements)
-                    cleaned_json = re.sub(r',(\s*[}\]])', '\\1', cleaned_json)
-                    
-                    # Remove any extra commas
-                    cleaned_json = re.sub(r',\s*,', ',', cleaned_json)
-                    
-                    # Fix missing quotes around string values
-                    cleaned_json = re.sub(r':\s*([^",{}\[\]\s][^,{}\[\]"]*?)(\s*[,}\]])', r':"\1"\\2', cleaned_json)
-                    
-                    # Fix arrays with trailing commas
-                    cleaned_json = re.sub(r',\s*]', ']', cleaned_json)
-                    
-                    self.logger.debug(f"Aggressive cleanup result:\n{cleaned_json}")
-                    data = json.loads(cleaned_json)
-                    self.logger.debug("Aggressive cleanup parsing successful")
-                except json.JSONDecodeError as e:
-                    json_errors.append(f"Aggressive cleanup error: {str(e)}")
-                    
-                    # Third attempt: manual structure reconstruction
-                    try:
-                        self.logger.debug("Attempting manual JSON reconstruction...")
-                        # Create a minimal valid JSON structure
-                        data = {
-                            "summary": {
-                                "purpose": "Error parsing LLM response",
-                                "components": [],
-                                "patterns": [],
-                                "algorithms": [],
-                                "organization": "Error parsing LLM response"
-                            },
-                            "relationships": [],
-                            "hierarchy": {
-                                "parents": [],
-                                "children": [],
-                                "layer": "Unknown",
-                                "dependencies": [],
-                                "lifecycle": "Error parsing LLM response"
-                            },
-                            "swot": {
-                                "strengths": [],
-                                "weaknesses": ["Error parsing LLM response"],
-                                "opportunities": [],
-                                "threats": []
-                            }
-                        }
-                        
-                        # Try to extract some information from the response
-                        # Extract purpose if available
-                        purpose_match = re.search(r'"purpose"\s*:\s*"([^"]+)"', json_str)
-                        if purpose_match:
-                            data["summary"]["purpose"] = purpose_match.group(1)
-                        
-                        self.logger.debug("Manual reconstruction successful with partial data")
-                    except Exception as e:
-                        json_errors.append(f"Manual reconstruction error: {str(e)}")
-                        self.logger.error(f"All JSON parsing attempts failed: {'; '.join(json_errors)}")
-                        self.logger.error(f"Final failed JSON string:\n{cleaned_json}")
-                        raise ValueError(f"Failed to parse JSON: {'; '.join(json_errors)}")
-            
-            # Create default structure for missing fields
-            default_data = {
-                'summary': {
-                    'purpose': 'Not specified',
-                    'components': [],
-                    'patterns': [],
-                    'algorithms': [],
-                    'organization': 'Not specified'
-                },
-                'relationships': [],
-                'hierarchy': {
-                    'parents': [],
-                    'children': [],
-                    'layer': 'Not specified',
-                    'dependencies': [],
-                    'lifecycle': 'Not specified'
-                },
-                'swot': {
-                    'strengths': [],
-                    'weaknesses': [],
-                    'opportunities': [],
-                    'threats': []
+                # If JSON5 fails, create a minimal valid structure
+                data = {
+                    "summary": {
+                        "purpose": "Error parsing LLM response",
+                        "components": [],
+                        "patterns": [],
+                        "algorithms": [],
+                        "organization": "Error parsing LLM response"
+                    },
+                    "relationships": [],
+                    "hierarchy": {
+                        "parents": [],
+                        "children": [],
+                        "layer": "Unknown",
+                        "dependencies": [],
+                        "lifecycle": "Error parsing LLM response"
+                    },
+                    "swot": {
+                        "strengths": [],
+                        "weaknesses": ["Error parsing LLM response"],
+                        "opportunities": [],
+                        "threats": []
+                    }
                 }
-            }
+                
+                # Try to extract some information from the response
+                try:
+                    # Extract purpose if available
+                    purpose_match = re.search(r'"purpose"\s*:\s*"([^"]+)"', json_str)
+                    if purpose_match:
+                        data["summary"]["purpose"] = purpose_match.group(1)
+                    
+                    # Extract components if available
+                    components = re.findall(r'"components"\s*:\s*\[(.*?)\]', json_str, re.DOTALL)
+                    if components:
+                        comp_items = re.findall(r'"([^"]+)"', components[0])
+                        data["summary"]["components"] = comp_items
+                    
+                    self.logger.debug("Manual extraction completed with partial data")
+                except Exception as e:
+                    self.logger.warning(f"Manual extraction failed: {str(e)}")
             
             # Clean up and validate the parsed data
             if isinstance(data, dict):
                 # Remove any unexpected fields
-                data = {k: v for k, v in data.items() if k in default_data}
+                valid_keys = {"summary", "relationships", "hierarchy", "swot"}
+                data = {k: v for k, v in data.items() if k in valid_keys}
                 
                 # Ensure relationships is a list
-                if 'relationships' in data:
-                    if isinstance(data['relationships'], dict):
-                        # Convert dict to list if needed
-                        data['relationships'] = [data['relationships']]
+                if "relationships" in data:
+                    if isinstance(data["relationships"], dict):
+                        data["relationships"] = [data["relationships"]]
+                    elif not isinstance(data["relationships"], list):
+                        data["relationships"] = []
                 
                 # Remove organization if it exists at root level
-                if 'organization' in data:
-                    del data['organization']
+                if "organization" in data:
+                    del data["organization"]
                 
                 # Ensure summary doesn't contain hierarchy info
-                if 'summary' in data and isinstance(data['summary'], dict):
-                    data['summary'] = {k: v for k, v in data['summary'].items() 
-                                     if k in default_data['summary']}
+                if "summary" in data and isinstance(data["summary"], dict):
+                    valid_summary_keys = {"purpose", "components", "patterns", "algorithms", "organization"}
+                    data["summary"] = {k: v for k, v in data["summary"].items() if k in valid_summary_keys}
             
-            # Deep merge with defaults
+            # Create default structure
+            default_data = {
+                "summary": {
+                    "purpose": "Not specified",
+                    "components": [],
+                    "patterns": [],
+                    "algorithms": [],
+                    "organization": "Not specified"
+                },
+                "relationships": [],
+                "hierarchy": {
+                    "parents": [],
+                    "children": [],
+                    "layer": "Not specified",
+                    "dependencies": [],
+                    "lifecycle": "Not specified"
+                },
+                "swot": {
+                    "strengths": [],
+                    "weaknesses": [],
+                    "opportunities": [],
+                    "threats": []
+                }
+            }
+            
+            # Merge with defaults (only fill in missing or empty values)
             def deep_merge(source, destination):
                 for key, value in source.items():
                     if key not in destination:
                         destination[key] = value
                     elif isinstance(value, dict) and isinstance(destination[key], dict):
                         deep_merge(value, destination[key])
-                    elif key in destination and not destination[key]:
-                        # Only replace empty values
+                    elif not destination[key]:  # Only replace empty values
                         destination[key] = value
                 return destination
             
@@ -552,10 +398,10 @@ Example of correct JSON formatting:
             # Create FileAnalysis object
             analysis = FileAnalysis(
                 file_path="",  # Will be set later
-                summary=merged_data['summary'],
-                relationships=merged_data['relationships'],
-                hierarchy=merged_data['hierarchy'],
-                swot=merged_data['swot'],
+                summary=merged_data["summary"],
+                relationships=merged_data["relationships"],
+                hierarchy=merged_data["hierarchy"],
+                swot=merged_data["swot"],
                 metrics=CodeMetrics(
                     lines_of_code=0,
                     comment_lines=0,
@@ -575,25 +421,25 @@ Example of correct JSON formatting:
             return FileAnalysis(
                 file_path="",
                 summary={
-                    'purpose': 'Error analyzing file',
-                    'components': [],
-                    'patterns': [],
-                    'algorithms': [],
-                    'organization': f'Error during analysis: {str(e)}'
+                    "purpose": "Error analyzing file",
+                    "components": [],
+                    "patterns": [],
+                    "algorithms": [],
+                    "organization": f"Error during analysis: {str(e)}"
                 },
                 relationships=[],
                 hierarchy={
-                    'parents': [],
-                    'children': [],
-                    'layer': 'Unknown',
-                    'dependencies': [],
-                    'lifecycle': f'Error during analysis: {str(e)}'
+                    "parents": [],
+                    "children": [],
+                    "layer": "Unknown",
+                    "dependencies": [],
+                    "lifecycle": f"Error during analysis: {str(e)}"
                 },
                 swot={
-                    'strengths': [],
-                    'weaknesses': [f'Error during file analysis: {str(e)}'],
-                    'opportunities': [],
-                    'threats': ['Analysis failed']
+                    "strengths": [],
+                    "weaknesses": [f"Error during file analysis: {str(e)}"],
+                    "opportunities": [],
+                    "threats": ["Analysis failed"]
                 },
                 metrics=CodeMetrics(
                     lines_of_code=0,
